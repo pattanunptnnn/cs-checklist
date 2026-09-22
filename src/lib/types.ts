@@ -228,3 +228,19 @@ export interface WeeklyDefectSummary {
   savedAt: string | null;
 }
 
+// ============================================================
+//  ระบบสิทธิ์ผู้ใช้งาน 3 บทบาท (Role-Based Access Control)
+// ============================================================
+
+export type UserRole = "admin" | "pm" | "supervisor";
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  title: string;
+  avatarUrl?: string;
+  phone?: string;
+}
+

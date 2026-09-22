@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { checklist, totalItems } from "@/lib/checklist";
 import type { RecordSummary } from "@/lib/types";
 import Link from "next/link";
+import UserNav from "./UserNav";
 import {
   Plus,
   Search,
@@ -150,26 +151,31 @@ export default function RecordList() {
               </span>
             </div>
 
-            {/* แท็บสลับ 3 โมดูลหลัก */}
-            <div className="inline-flex p-1 bg-black/25 backdrop-blur-md rounded-2xl border border-white/15 text-xs">
-              <div className="px-3.5 py-1.5 rounded-xl font-bold bg-white text-brand shadow-sm flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5" />
-                <span>ตรวจโครงสร้าง ITP</span>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {/* แท็บสลับ 3 โมดูลหลัก */}
+              <div className="inline-flex p-1 bg-black/25 backdrop-blur-md rounded-2xl border border-white/15 text-xs">
+                <div className="px-3.5 py-1.5 rounded-xl font-bold bg-white text-brand shadow-sm flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>ตรวจโครงสร้าง ITP</span>
+                </div>
+                <Link
+                  href="/defects"
+                  className="px-3 py-1.5 rounded-xl font-semibold text-white/80 hover:text-white transition-colors flex items-center gap-1.5"
+                >
+                  <Wrench className="w-3.5 h-3.5" />
+                  <span>ตรวจ Defect รายวีค</span>
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="px-3 py-1.5 rounded-xl font-semibold text-white/80 hover:text-white transition-colors flex items-center gap-1.5"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>แดชบอร์ด PM</span>
+                </Link>
               </div>
-              <Link
-                href="/defects"
-                className="px-3 py-1.5 rounded-xl font-semibold text-white/80 hover:text-white transition-colors flex items-center gap-1.5"
-              >
-                <Wrench className="w-3.5 h-3.5" />
-                <span>ตรวจ Defect รายวีค</span>
-              </Link>
-              <Link
-                href="/dashboard"
-                className="px-3 py-1.5 rounded-xl font-semibold text-white/80 hover:text-white transition-colors flex items-center gap-1.5"
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>แดชบอร์ด PM</span>
-              </Link>
+
+              {/* โปรไฟล์ & สลับบทบาท */}
+              <UserNav />
             </div>
           </div>
 

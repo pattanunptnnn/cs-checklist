@@ -17,10 +17,14 @@ export const viewport: Viewport = {
   ],
 };
 
+import { AuthProvider } from "@/components/AuthProvider";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="th">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

@@ -14,6 +14,8 @@ import type {
 import ItemRow from "./ItemRow";
 import PhotoUploader from "./PhotoUploader";
 import QRCheckIn from "./QRCheckIn";
+import UserNav from "./UserNav";
+import { useAuth } from "./AuthProvider";
 import {
   ArrowLeft,
   Printer,
@@ -166,6 +168,8 @@ export function getSectionCategory(code: string): CategoryTheme {
 }
 
 export default function RecordEditor({ id }: { id: string }) {
+  const { user, role } = useAuth();
+  const isSupervisor = role === "supervisor";
   const [record, setRecord] = useState<InspectionRecord | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -542,6 +546,8 @@ export default function RecordEditor({ id }: { id: string }) {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              <UserNav />
+
               <button
                 type="button"
                 onClick={() => window.print()}
@@ -1152,10 +1158,43 @@ export default function RecordEditor({ id }: { id: string }) {
           <div className="space-y-4">
             {/* สถานะการอนุมัติภาพรวม */}
             <div className="card p-5">
-              <h2 className="font-display font-bold text-lg text-ink mb-3 flex items-center gap-2">
-                <Scale className="w-5 h-5 text-brand" />
-                <span>ผลการพิจารณาอนุมัติ (Final Approval Status)</span>
-              </h2>
+              <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                <h2 className="font-display font-bold text-lg text-ink flex items-center gap-2">
+                  <Scale className="w-5 h-5 text-brand" />
+                  <span>ผลการพิจารณาอนุมัติ (Final Approval Status)</span>
+                </h2>
+
+                {isSupervisor ? (
+                  <span className="chip bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-bold">
+                    🛡️ คุณมีสิทธิ์อนุมัติในฐานะ Supervisor
+                  </span>
+                ) : (
+                  <span className="chip bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold">
+                    🔒 สิทธิ์เฉพาะ Supervisor เท่านั้น
+                  </span>
+                )}
+              </div>
+
+              {/* ป้ายแจ้งเตือนสิทธิ์เมื่อไม่ใช่ Supervisor */}
+              {!isSupervisor && (
+                <div className="mb-4 p-3 rounded-xl border text-xs flex items-center gap-2.5 font-medium shadow-sm bg-sunken border-line">
+                  {role === "admin" ? (
+                    <>
+                      <span className="text-base shrink-0">👑</span>
+                      <span>
+                        <strong>โหมดผู้ดูแลระบบ (Admin View-only):</strong> บัญชี Admin มีสิทธิ์ตรวจสอบข้อมูลทุกส่วน แต่ไม่มีอำนาจอนุมัติผลการตรวจรับงาน (การอนุมัติสงวนสิทธิ์เฉพาะ Supervisor เท่านั้น)
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-base shrink-0">🛠️</span>
+                      <span>
+                        <strong>รอการอนุมัติจาก Supervisor:</strong> วิศวกรโครงการ (PM) มีหน้าที่ตรวจหน้างานและลงนามในส่วนที่ 1 และ 2 เท่านั้น ไม่มีสิทธิ์ตัดสินใจอนุมัติผลการตรวจรับงาน
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {checklist.approveOpts.map((opt) => {
@@ -1171,8 +1210,11 @@ export default function RecordEditor({ id }: { id: string }) {
                     <button
                       key={opt}
                       type="button"
+                      disabled={!isSupervisor}
                       onClick={() => updateApproval(opt)}
-                      className={`p-3 rounded-xl border text-xs text-center transition-all ${color}`}
+                      className={`p-3 rounded-xl border text-xs text-center transition-all ${
+                        !isSupervisor ? "opacity-60 cursor-not-allowed " : ""
+                      }${color}`}
                     >
                       {opt}
                     </button>
@@ -1186,10 +1228,15 @@ export default function RecordEditor({ id }: { id: string }) {
                 </label>
                 <textarea
                   rows={3}
+                  disabled={!isSupervisor}
                   value={record.approvalComment || ""}
                   onChange={(e) => updateApproval(record.approvalStatus || "รอตรวจ", e.target.value)}
-                  placeholder="เช่น ให้ส่งผลทดสอบคอนกรีต 28 วันเพิ่มเติมก่อนเทงวดถัดไป..."
-                  className="field"
+                  placeholder={
+                    isSupervisor
+                      ? "เช่น ให้ส่งผลทดสอบคอนกรีต 28 วันเพิ่มเติมก่อนเทงวดถัดไป..."
+                      : "(เฉพาะ Supervisor สามารถกรอกความเห็นของผู้อนุมัติได้)"
+                  }
+                  className={`field ${!isSupervisor ? "bg-sunken text-ink3 cursor-not-allowed opacity-80" : ""}`}
                 />
               </div>
             </div>
@@ -1198,22 +1245,32 @@ export default function RecordEditor({ id }: { id: string }) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {checklist.signRoles.map(([roleKey, roleLabel]) => {
                 const sig = record.signatures?.[roleKey] || { name: "", date: "" };
+                const isApproverRole = roleKey === "approve";
+                const canSignThis = isApproverRole ? isSupervisor : true;
 
                 return (
                   <div key={roleKey} className="card p-4 flex flex-col justify-between">
                     <div>
-                      <span className="chip bg-sunken text-ink2 text-[11px] font-bold mb-2">
-                        {roleKey === "prep" ? "1. จัดทำ" : roleKey === "check" ? "2. ผู้ตรวจสอบ" : "3. ผู้อนุมัติ"}
-                      </span>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="chip bg-sunken text-ink2 text-[11px] font-bold">
+                          {roleKey === "prep" ? "1. จัดทำ" : roleKey === "check" ? "2. ผู้ตรวจสอบ" : "3. ผู้อนุมัติ"}
+                        </span>
+                        {isApproverRole && (
+                          <span className={`chip text-[10px] font-bold ${isSupervisor ? "bg-emerald-500/15 text-emerald-700" : "bg-amber-500/15 text-amber-700"}`}>
+                            {isSupervisor ? "สิทธิ์ Supervisor" : "ล็อกสิทธิ์"}
+                          </span>
+                        )}
+                      </div>
                       <h3 className="font-bold text-sm text-ink mb-3">{roleLabel}</h3>
 
                       <label className="block mb-2.5">
                         <span className="block text-[11px] font-semibold text-ink3 mb-1">ชื่อ-นามสกุล ผู้ลงนาม</span>
                         <input
+                          disabled={!canSignThis}
                           value={sig.name || ""}
                           onChange={(e) => updateSignature(roleKey, { name: e.target.value })}
                           placeholder="ชื่อ-นามสกุล"
-                          className="field"
+                          className={`field ${!canSignThis ? "bg-sunken opacity-70 cursor-not-allowed" : ""}`}
                         />
                       </label>
 
@@ -1221,35 +1278,43 @@ export default function RecordEditor({ id }: { id: string }) {
                         <span className="block text-[11px] font-semibold text-ink3 mb-1">วันที่ลงนาม</span>
                         <input
                           type="date"
+                          disabled={!canSignThis}
                           value={sig.date || ""}
                           onChange={(e) => updateSignature(roleKey, { date: e.target.value })}
-                          className="field"
+                          className={`field ${!canSignThis ? "bg-sunken opacity-70 cursor-not-allowed" : ""}`}
                         />
                       </label>
                     </div>
 
                     <div className="pt-3 border-t border-line/60">
-                      <button
-                        type="button"
-                        onClick={() => updateSignature(roleKey, {
-                          signed: !sig.signed,
-                          date: sig.date || new Date().toISOString().slice(0, 10),
-                        })}
-                        className={`w-full py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                          sig.signed
-                            ? "bg-pass/10 text-pass border border-pass/30"
-                            : "bg-sunken text-ink2 border border-line hover:border-brand"
-                        }`}
-                      >
-                        {sig.signed ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>เซ็นรับรองแล้ว</span>
-                          </>
-                        ) : (
-                          <span>คลิกเพื่อลงนามรับรอง</span>
-                        )}
-                      </button>
+                      {canSignThis ? (
+                        <button
+                          type="button"
+                          onClick={() => updateSignature(roleKey, {
+                            signed: !sig.signed,
+                            name: sig.name || user?.name || "",
+                            date: sig.date || new Date().toISOString().slice(0, 10),
+                          })}
+                          className={`w-full py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                            sig.signed
+                              ? "bg-pass/10 text-pass border border-pass/30"
+                              : "bg-sunken text-ink2 border border-line hover:border-brand"
+                          }`}
+                        >
+                          {sig.signed ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>เซ็นรับรองแล้ว</span>
+                            </>
+                          ) : (
+                            <span>คลิกเพื่อลงนามรับรอง</span>
+                          )}
+                        </button>
+                      ) : (
+                        <div className="w-full py-2 rounded-xl text-xs font-bold bg-sunken text-ink3 border border-line text-center opacity-70">
+                          🔒 เฉพาะ Supervisor เซ็นอนุมัติ
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

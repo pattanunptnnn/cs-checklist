@@ -29,6 +29,7 @@ import {
   RefreshCw,
   Wrench,
 } from "lucide-react";
+import UserNav from "./UserNav";
 
 const TOTAL = totalItems();
 
@@ -306,14 +307,17 @@ export default function PMDashboard() {
               <span className="text-xs text-white/80 font-medium">PM Management</span>
             </div>
 
-            <button
-              type="button"
-              onClick={loadData}
-              title="รีเฟรชข้อมูล"
-              className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 grid place-items-center text-white text-xs transition-colors"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-            </button>
+            <div className="flex items-center gap-2">
+              <UserNav />
+              <button
+                type="button"
+                onClick={loadData}
+                title="รีเฟรชข้อมูล"
+                className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 grid place-items-center text-white text-xs transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
