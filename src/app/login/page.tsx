@@ -87,6 +87,29 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* แจ้งเตือนกรณีล็อกอินอยู่แล้ว */}
+          {currentUser && (
+            <div className="mb-5 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <div className="min-w-0">
+                  <div className="font-bold text-ink truncate">
+                    เข้าสู่ระบบอยู่แล้ว: {currentUser.name}
+                  </div>
+                  <div className="text-[11px] text-ink3 truncate">
+                    สิทธิ์: {currentUser.role.toUpperCase()} · {currentUser.email}
+                  </div>
+                </div>
+              </div>
+              <Link
+                href="/"
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 transition-colors shadow-sm"
+              >
+                เข้าใช้งาน →
+              </Link>
+            </div>
+          )}
+
           {/* ─────────── 1. ปุ่ม Quick Demo Login 3 บทบาท (คลิกเข้าได้ทันที) ─────────── */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">

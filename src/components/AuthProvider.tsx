@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import type { AuthUser, UserRole } from "@/lib/types";
 import { DEMO_USERS } from "@/lib/auth";
 
@@ -16,12 +17,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = "cs_auth_user";
+// ใช้ key ใหม่ เพื่อให้ผู้ใช้ที่เคยมี session เก่าถูกนำไปหน้า /login เพื่อเลือกบทบาทก่อน
+const STORAGE_KEY = "bigc_cs_user_session";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // ค่าเริ่มต้นให้เป็น PM เพื่อความสะดวกในการเข้าใช้งานตรวจงานได้ทันที
-  const [user, setUser] = useState<AuthUser | null>(DEMO_USERS.pm);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
   // โหลด session จาก localStorage เมื่อเริ่มต้น
   useEffect(() => {
@@ -31,17 +34,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const parsed = JSON.parse(saved) as AuthUser;
         if (parsed && DEMO_USERS[parsed.role]) {
           setUser(parsed);
+        } else {
+          setUser(null);
         }
       } else {
-        // บันทึก default user (PM)
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(DEMO_USERS.pm));
+        setUser(null);
       }
     } catch {
-      // fallback
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
   }, []);
+
+  // ระบบ Auth Guard: หากยังไม่ได้ Login และไม่ได้อยู่ที่หน้า /login ให้ Redirect ไปหน้า /login ทันที
+  useEffect(() => {
+    if (!isLoading) {
+      if (!user && pathname !== "/login") {
+        router.push("/login");
+      }
+    }
+  }, [isLoading, user, pathname, router]);
 
   const login = useCallback(async (emailOrRole: string, password?: string) => {
     const term = emailOrRole.trim().toLowerCase();
@@ -80,8 +93,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
-  }, []);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("cs_auth_user");
+    } catch {
+      // ignore
+    }
+    router.push("/login");
+  }, [router]);
 
   // สลับ Role แบบรวดเร็วเพื่อทดสอบสิทธิ์
   const switchRole = useCallback((newRole: UserRole) => {
@@ -92,6 +111,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const role = user?.role || "pm";
   const isAuthenticated = Boolean(user);
+
+  // กำลังโหลดสถานะ
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#07172b] flex flex-col items-center justify-center text-white p-4">
+        <div className="w-10 h-10 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin mb-4" />
+        <div className="text-sm font-semibold text-white/80 tracking-wide">กำลังเชื่อมต่อระบบตรวจงาน...</div>
+      </div>
+    );
+  }
+
+  // หากยังไม่ได้เข้าสู่ระบบ และไม่ได้อยู่ที่ /login ให้แสดงหน้าจอนำทางเพื่อป้องกันการกะพริบ
+  if (!user && pathname !== "/login") {
+    return (
+      <div className="min-h-screen bg-[#07172b] flex flex-col items-center justify-center text-white p-4">
+        <div className="w-10 h-10 border-3 border-amber-400 border-t-transparent rounded-full animate-spin mb-4" />
+        <div className="text-sm font-semibold text-white/80 tracking-wide">กรุณาเข้าสู่ระบบ... กำลังพาไปหน้า Login</div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider
