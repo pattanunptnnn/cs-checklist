@@ -1,0 +1,179 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Sans+Thai+Condensed:wght@600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   โทนสี — อ้างอิงวัสดุหน้างาน: คอนกรีต / แบบแปลนน้ำเงิน / ส้มนิรภัย
+   เก็บเป็นช่อง RGB เพื่อให้ Tailwind ใช้ opacity modifier ได้
+   ============================================================ */
+:root {
+  --paper: 243 246 250;
+  --card: 255 255 255;
+  --sunken: 247 250 252;
+  --ink: 15 23 42;
+  --ink2: 71 85 105;
+  --ink3: 148 163 184;
+  --line: 226 232 240;
+  --line2: 203 213 225;
+  --brand: 26 77 138;
+  --brand-dark: 18 53 96;
+  --accent: 217 119 6;
+  --pass: 16 149 93;
+  --fail: 225 29 72;
+  --na: 100 116 139;
+  --shadow: 15 23 42;
+  color-scheme: light;
+}
+
+/* โหมดมืด */
+:root[data-theme="dark"],
+body.dark {
+  --paper: 11 15 25;
+  --card: 20 27 44;
+  --sunken: 28 37 58;
+  --ink: 241 245 249;
+  --ink2: 156 163 175;
+  --ink3: 107 114 128;
+  --line: 38 48 71;
+  --line2: 55 65 81;
+  --brand: 79 140 235;
+  --brand-dark: 37 99 235;
+  --accent: 245 158 11;
+  --pass: 34 197 94;
+  --fail: 244 63 94;
+  --na: 148 163 184;
+  --shadow: 0 0 0;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: 11 15 25;
+    --card: 20 27 44;
+    --sunken: 28 37 58;
+    --ink: 241 245 249;
+    --ink2: 156 163 175;
+    --ink3: 107 114 128;
+    --line: 38 48 71;
+    --line2: 55 65 81;
+    --brand: 79 140 235;
+    --brand-dark: 37 99 235;
+    --accent: 245 158 11;
+    --pass: 34 197 94;
+    --fail: 244 63 94;
+    --na: 148 163 184;
+    --shadow: 0 0 0;
+    color-scheme: dark;
+  }
+}
+
+html,
+body {
+  background: rgb(var(--paper));
+  color: rgb(var(--ink));
+  min-height: 100vh;
+}
+
+body {
+  font-family: "IBM Plex Sans Thai", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+  letter-spacing: -0.01em;
+}
+
+@layer base {
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand));
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  input,
+  textarea,
+  select {
+    color: rgb(var(--ink));
+    font-size: 15px;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgb(var(--ink3));
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* ช่องกรอกมาตรฐาน */
+  .field {
+    @apply w-full bg-sunken border border-line rounded-xl px-3.5 py-2.5 text-[14.5px]
+           transition-all placeholder:text-ink3 shadow-sm
+           focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/20 focus:outline-none;
+  }
+
+  /* ป้ายกำกับ Chip สไตล์โมเดิร์น */
+  .chip {
+    @apply inline-flex items-center gap-1 text-[11.5px] font-semibold leading-none
+           px-2.5 py-1.5 rounded-lg whitespace-nowrap transition-colors;
+  }
+
+  /* การ์ดพร้อม Drop Shadow & Border ละมุน */
+  .card {
+    @apply bg-card border border-line/80 rounded-2xl shadow-card transition-all;
+  }
+
+  .card-hover {
+    @apply hover:border-brand/30 hover:shadow-lift transition-all duration-200;
+  }
+
+  /* ปุ่มกดสไตล์พรีเมียม */
+  .btn-primary {
+    @apply bg-gradient-to-r from-brand to-[#1e5c9b] text-white font-display font-bold
+           rounded-xl shadow-md hover:shadow-lg active:scale-[0.98] transition-all
+           disabled:opacity-50 disabled:pointer-events-none;
+  }
+}
+
+/* Scrollbar สวยงาม */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line2));
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--ink3));
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

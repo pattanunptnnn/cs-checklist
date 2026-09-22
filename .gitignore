@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+data/records/*.json
+data/defects/*.json
+uploads/*
+!uploads/.gitkeep
+npm-debug.log*
+.DS_Store
+run.log
+.env
+.env*.local

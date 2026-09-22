@@ -1,0 +1,30 @@
+{
+  "name": "cs-checklist-next",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ระบบตรวจรับงานโครงสร้าง (CS Check List) — Next.js + TypeScript + Tailwind CSS",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^1.47.0",
+    "next": "^16.3.5",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.5.3"
+  }
+}
