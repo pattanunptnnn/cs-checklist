@@ -3,21 +3,29 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { AuthUser, UserRole } from "@/lib/types";
-import { DEMO_USERS } from "@/lib/auth";
+import { DEMO_USERS, authenticateUser, registerUser, getRegisteredUsers } from "@/lib/auth";
 
 interface AuthContextType {
   user: AuthUser | null;
   role: UserRole;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (emailOrRole: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  register: (data: {
+    name: string;
+    email: string;
+    password: string;
+    role: UserRole;
+    title?: string;
+    phone?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   switchRole: (newRole: UserRole) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// ใช้ key ใหม่ เพื่อให้ผู้ใช้ที่เคยมี session เก่าถูกนำไปหน้า /login เพื่อเลือกบทบาทก่อน
+// Session storage key
 const STORAGE_KEY = "bigc_cs_user_session";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -32,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as AuthUser;
-        if (parsed && DEMO_USERS[parsed.role]) {
+        if (parsed && parsed.id && parsed.role) {
           setUser(parsed);
         } else {
           setUser(null);
@@ -56,40 +64,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isLoading, user, pathname, router]);
 
-  const login = useCallback(async (emailOrRole: string, password?: string) => {
-    const term = emailOrRole.trim().toLowerCase();
+  const login = useCallback(async (email: string, password?: string) => {
+    const term = email.trim().toLowerCase();
+    const pwd = password || "";
 
-    // 1. เข้าสู่ระบบแบบระบุ Role โดยตรง (Quick Login)
-    if (term === "admin" || term === "pm" || term === "supervisor") {
-      const targetUser = DEMO_USERS[term as UserRole];
-      setUser(targetUser);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(targetUser));
-      return { success: true };
+    const res = authenticateUser(term, pwd);
+    if (!res.success || !res.user) {
+      return { success: false, error: res.error || "เข้าสู่ระบบไม่สำเร็จ" };
     }
 
-    // 2. ตรวจสอบด้วย Email และ Password
-    const found = Object.values(DEMO_USERS).find((u) => u.email.toLowerCase() === term);
-    if (!found) {
-      return { success: false, error: "ไม่พบอีเมลผู้ใช้งานนี้ในระบบ" };
-    }
-
-    if (password && found.password !== password) {
-      return { success: false, error: "รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง" };
-    }
-
-    const authUser: AuthUser = {
-      id: found.id,
-      email: found.email,
-      name: found.name,
-      role: found.role,
-      title: found.title,
-      phone: found.phone,
-    };
-
-    setUser(authUser);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
+    setUser(res.user);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(res.user));
     return { success: true };
   }, []);
+
+  const register = useCallback(
+    async (data: {
+      name: string;
+      email: string;
+      password: string;
+      role: UserRole;
+      title?: string;
+      phone?: string;
+    }) => {
+      const res = registerUser(data);
+      if (!res.success || !res.user) {
+        return { success: false, error: res.error || "สร้างบัญชีไม่สำเร็จ" };
+      }
+
+      setUser(res.user);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(res.user));
+      return { success: true };
+    },
+    []
+  );
 
   const logout = useCallback(() => {
     setUser(null);
@@ -140,6 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated,
         isLoading,
         login,
+        register,
         logout,
         switchRole,
       }}
