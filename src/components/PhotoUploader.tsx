@@ -11,6 +11,111 @@ export interface WatermarkMeta {
   coords?: { lat: number; lng: number; accuracy?: number } | null;
 }
 
+// อ่านวันเวลาที่ถ่ายภาพจริงจาก EXIF Metadata ของรูปถ่าย (DateTimeOriginal)
+// หากไม่มี EXIF จะ fallback อ่านจาก file.lastModified ของอุปกรณ์ผู้ใช้
+async function extractPhotoCaptureDate(file: File): Promise<Date> {
+  try {
+    const slice = await file.slice(0, 131072).arrayBuffer();
+    const view = new DataView(slice);
+    if (view.getUint16(0) === 0xffd8) {
+      let offset = 2;
+      const len = view.byteLength;
+      while (offset < len - 4) {
+        const marker = view.getUint16(offset);
+        offset += 2;
+        if (marker === 0xffe1) {
+          offset += 2;
+          const exifHeader = view.getUint32(offset);
+          if (exifHeader === 0x45786966) {
+            const tiffStart = offset + 6;
+            const isLittle = view.getUint16(tiffStart) === 0x4949;
+            const getU16 = (o: number) => view.getUint16(tiffStart + o, isLittle);
+            const getU32 = (o: number) => view.getUint32(tiffStart + o, isLittle);
+
+            const ifd0Offset = getU32(4);
+            const numEntries = getU16(ifd0Offset);
+
+            let exifIfdOffset = 0;
+            let dateStr = "";
+
+            for (let i = 0; i < numEntries; i++) {
+              const entryOffset = ifd0Offset + 2 + i * 12;
+              const tag = getU16(entryOffset);
+              if (tag === 0x8769) {
+                exifIfdOffset = getU32(entryOffset + 8);
+              } else if (tag === 0x0132 && !dateStr) {
+                const valOffset = getU32(entryOffset + 8);
+                dateStr = readString(view, tiffStart + valOffset, 19);
+              }
+            }
+
+            if (exifIfdOffset > 0) {
+              const numExifEntries = getU16(exifIfdOffset);
+              for (let i = 0; i < numExifEntries; i++) {
+                const entryOffset = exifIfdOffset + 2 + i * 12;
+                const tag = getU16(entryOffset);
+                if (tag === 0x9003 || tag === 0x9004) {
+                  const valOffset = getU32(entryOffset + 8);
+                  dateStr = readString(view, tiffStart + valOffset, 19);
+                  break;
+                }
+              }
+            }
+
+            if (dateStr && dateStr.length >= 19) {
+              const parts = dateStr.split(" ");
+              if (parts.length === 2) {
+                const [y, m, d] = parts[0].split(":");
+                const [hr, min, sec] = parts[1].split(":");
+                const parsed = new Date(
+                  Number(y),
+                  Number(m) - 1,
+                  Number(d),
+                  Number(hr),
+                  Number(min),
+                  Number(sec)
+                );
+                if (!isNaN(parsed.getTime())) {
+                  return parsed;
+                }
+              }
+            }
+          }
+          break;
+        } else if ((marker & 0xff00) === 0xff00) {
+          const segLength = view.getUint16(offset);
+          offset += segLength;
+        } else {
+          break;
+        }
+      }
+    }
+  } catch {
+    // fallback below
+  }
+
+  // Fallback: ใช้เวลาบันทึกไฟล์ของอุปกรณ์มือถือ (file.lastModified)
+  if (file.lastModified && !isNaN(file.lastModified)) {
+    const fileDate = new Date(file.lastModified);
+    if (!isNaN(fileDate.getTime())) {
+      return fileDate;
+    }
+  }
+
+  return new Date();
+}
+
+function readString(view: DataView, offset: number, maxLen: number): string {
+  let str = "";
+  for (let i = 0; i < maxLen; i++) {
+    if (offset + i >= view.byteLength) break;
+    const c = view.getUint8(offset + i);
+    if (c === 0) break;
+    str += String.fromCharCode(c);
+  }
+  return str;
+}
+
 // ย่อขนาดรูปและฝังลายน้ำหลักฐานหน้างานลงบนเนื้อภาพอัตโนมัติ
 async function shrinkAndWatermark(file: File, meta?: WatermarkMeta): Promise<Blob> {
   if (!file.type.startsWith("image/")) return file;
@@ -40,24 +145,25 @@ async function shrinkAndWatermark(file: File, meta?: WatermarkMeta): Promise<Blo
   ctx.drawImage(bmp, 0, 0, w, h);
   bmp.close?.();
 
-  // 2. ออกแบบลายน้ำสไตล์ Minimal (Corner Floating Glass Pill)
+  // 2. ดึงเวลาถ่ายจริงจาก EXIF / file.lastModified
+  const captureDate = await extractPhotoCaptureDate(file);
+  const dateStr = captureDate.toLocaleDateString("th-TH", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+  const timeStr = captureDate.toLocaleTimeString("th-TH", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  // 3. ออกแบบลายน้ำสไตล์ Minimal (Corner Floating Glass Pill)
   const scale = Math.max(0.75, Math.min(1.5, w / 1200));
   const padX = Math.round(14 * scale);
   const padY = Math.round(10 * scale);
   const fontSizeHeader = Math.round(13 * scale);
   const fontSizeSub = Math.round(11 * scale);
   const lineGap = Math.round(16 * scale);
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("th-TH", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-  });
-  const timeStr = now.toLocaleTimeString("th-TH", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
   const storeText = meta?.storeName
     ? `${meta.storeName}${meta.storeCode ? ` (${meta.storeCode})` : ""}`
@@ -69,7 +175,7 @@ async function shrinkAndWatermark(file: File, meta?: WatermarkMeta): Promise<Blo
       : "";
 
   const line1 = `BIG-C · ${storeText}`;
-  const line2 = `${pmText} · ${dateStr} ${timeStr}`;
+  const line2 = `${pmText} · 📷 ${dateStr} ${timeStr}`;
   const line3 = gpsText;
 
   // วัดขนาดความกว้างของข้อความเพื่อทำกล่องพอดีคำ

@@ -24,6 +24,10 @@ import {
   Building2,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  LayoutList,
   Camera,
   Check,
   X,
@@ -70,6 +74,97 @@ function ProgressBar({ pass, fail, filled, total, thin }: {
   );
 }
 
+export interface CategoryTheme {
+  name: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  accentBg: string;
+  accentBorder: string;
+  cardBorder: string;
+  iconBg: string;
+  pillColor: string;
+}
+
+export function getSectionCategory(code: string): CategoryTheme {
+  if (code === "0" || code === "2") {
+    return {
+      name: "เตรียมงาน & งานดิน",
+      badgeBg: "bg-amber-500/15",
+      badgeText: "text-amber-800 dark:text-amber-300",
+      badgeBorder: "border-amber-500/30",
+      accentBg: "bg-amber-500/10",
+      accentBorder: "border-amber-500/40",
+      cardBorder: "border-l-4 border-l-amber-500",
+      iconBg: "bg-gradient-to-br from-amber-500 to-amber-600 text-white",
+      pillColor: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    };
+  }
+  if (code === "1" || code === "3") {
+    return {
+      name: "งานเสาเข็ม & ฐานราก",
+      badgeBg: "bg-sky-500/15",
+      badgeText: "text-sky-800 dark:text-sky-300",
+      badgeBorder: "border-sky-500/30",
+      accentBg: "bg-sky-500/10",
+      accentBorder: "border-sky-500/40",
+      cardBorder: "border-l-4 border-l-sky-500",
+      iconBg: "bg-gradient-to-br from-sky-500 to-blue-600 text-white",
+      pillColor: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    };
+  }
+  if (code === "4" || code === "5" || code === "6" || code === "8" || code === "9") {
+    return {
+      name: "งานคอนกรีต เสา-คาน-พื้น",
+      badgeBg: "bg-emerald-500/15",
+      badgeText: "text-emerald-800 dark:text-emerald-300",
+      badgeBorder: "border-emerald-500/30",
+      accentBg: "bg-emerald-500/10",
+      accentBorder: "border-emerald-500/40",
+      cardBorder: "border-l-4 border-l-emerald-500",
+      iconBg: "bg-gradient-to-br from-emerald-500 to-teal-600 text-white",
+      pillColor: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    };
+  }
+  if (code === "7" || code === "10" || code === "11") {
+    return {
+      name: "งานแผ่นพื้น & โครงหลังคา",
+      badgeBg: "bg-indigo-500/15",
+      badgeText: "text-indigo-800 dark:text-indigo-300",
+      badgeBorder: "border-indigo-500/30",
+      accentBg: "bg-indigo-500/10",
+      accentBorder: "border-indigo-500/40",
+      cardBorder: "border-l-4 border-l-indigo-500",
+      iconBg: "bg-gradient-to-br from-indigo-500 to-purple-600 text-white",
+      pillColor: "border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
+    };
+  }
+  if (code === "12" || code === "13") {
+    return {
+      name: "งานผนัง & พื้นลานจอด",
+      badgeBg: "bg-rose-500/15",
+      badgeText: "text-rose-800 dark:text-rose-300",
+      badgeBorder: "border-rose-500/30",
+      accentBg: "bg-rose-500/10",
+      accentBorder: "border-rose-500/40",
+      cardBorder: "border-l-4 border-l-rose-500",
+      iconBg: "bg-gradient-to-br from-rose-500 to-pink-600 text-white",
+      pillColor: "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+    };
+  }
+  return {
+    name: "เอกสาร & การทดสอบ",
+    badgeBg: "bg-teal-500/15",
+    badgeText: "text-teal-800 dark:text-teal-300",
+    badgeBorder: "border-teal-500/30",
+    accentBg: "bg-teal-500/10",
+    accentBorder: "border-teal-500/40",
+    cardBorder: "border-l-4 border-l-teal-500",
+    iconBg: "bg-gradient-to-br from-teal-500 to-cyan-600 text-white",
+    pillColor: "border-teal-500/40 bg-teal-500/10 text-teal-700 dark:text-teal-300",
+  };
+}
+
 export default function RecordEditor({ id }: { id: string }) {
   const [record, setRecord] = useState<InspectionRecord | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -81,6 +176,8 @@ export default function RecordEditor({ id }: { id: string }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [openProject, setOpenProject] = useState(true);
   const [showNcrModal, setShowNcrModal] = useState(false);
+  const [viewMode, setViewMode] = useState<"wizard" | "all">("wizard");
+  const [wizardStep, setWizardStep] = useState<number>(0);
 
   useEffect(() => {
     let alive = true;
@@ -180,6 +277,82 @@ export default function RecordEditor({ id }: { id: string }) {
     setDirty(true);
     setRecord((prev) => (prev ? { ...prev, checkIn: null } : prev));
   }, []);
+
+  // ตรวจสอบว่าในหมวดปัจจุบัน มีข้อที่บังคับรูปแล้วยังไม่ได้แนบหรือไม่
+  const validateStepPhotos = useCallback(
+    (step: number): { valid: boolean; missingCount: number; firstKey?: string } => {
+      if (!record || step >= checklist.sections.length) return { valid: true, missingCount: 0 };
+      const sec = checklist.sections[step];
+      if (!sec) return { valid: true, missingCount: 0 };
+
+      const missingKeys: string[] = [];
+      sec.blocks.forEach((block, bi) => {
+        block.items.forEach((item, ii) => {
+          const k = itemKey(sec.id, bi, ii);
+          const res = record.items[k];
+          // มี photoReq, ผู้ใช้ลงผลแล้ว (pass หรือ fail), แต่ยังไม่ได้แนบรูป
+          if (item.photoReq && res && res.status !== "" && res.status !== "na") {
+            if (!res.photos || res.photos.length === 0) {
+              missingKeys.push(k);
+            }
+          }
+        });
+      });
+
+      if (missingKeys.length > 0) {
+        return { valid: false, missingCount: missingKeys.length, firstKey: missingKeys[0] };
+      }
+      return { valid: true, missingCount: 0 };
+    },
+    [record]
+  );
+
+  const handleNextStep = useCallback(() => {
+    // ถ้าอยู่ในหมวด ITP ให้ตรวจสอบรูปที่บังคับก่อน
+    if (wizardStep < checklist.sections.length) {
+      const check = validateStepPhotos(wizardStep);
+      if (!check.valid) {
+        alert(
+          `⚠️ ในหมวดนี้มี ${check.missingCount} รายการที่กำหนดให้ต้องแนบภาพถ่ายหน้างานจริงก่อน จึงจะไปขั้นตอนถัดไปได้\n\nระบบจะเลื่อนหน้าจอไปยังรายการที่ต้องแนบรูปภาพครับ`
+        );
+        if (check.firstKey) {
+          const el = document.getElementById(`item-row-${check.firstKey}`);
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }
+        return;
+      }
+    }
+
+    if (wizardStep < 16) {
+      const nextStep = wizardStep + 1;
+      setWizardStep(nextStep);
+      if (nextStep < 15) {
+        setActiveTab("checklist");
+      } else if (nextStep === 15) {
+        setActiveTab("tests");
+      } else if (nextStep === 16) {
+        setActiveTab("signatures");
+      }
+      window.scrollTo({ top: 120, behavior: "smooth" });
+    }
+  }, [wizardStep, validateStepPhotos]);
+
+  const handlePrevStep = useCallback(() => {
+    if (wizardStep > 0) {
+      const prevStep = wizardStep - 1;
+      setWizardStep(prevStep);
+      if (prevStep < 15) {
+        setActiveTab("checklist");
+      } else if (prevStep === 15) {
+        setActiveTab("tests");
+      } else if (prevStep === 16) {
+        setActiveTab("signatures");
+      }
+      window.scrollTo({ top: 120, behavior: "smooth" });
+    }
+  }, [wizardStep]);
 
   const tally = useMemo(() => {
     let pass = 0, fail = 0, filled = 0;
@@ -397,7 +570,10 @@ export default function RecordEditor({ id }: { id: string }) {
           {/* Tab Navigation สไตล์โมเดิร์น */}
           <div className="flex items-center gap-2 mt-3 pt-2 border-t border-white/15 overflow-x-auto scrollbar-none">
             <button
-              onClick={() => setActiveTab("checklist")}
+              onClick={() => {
+                setActiveTab("checklist");
+                setWizardStep((prev) => (prev > 14 ? 0 : prev));
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === "checklist"
                   ? "bg-white text-brand shadow-sm"
@@ -412,7 +588,10 @@ export default function RecordEditor({ id }: { id: string }) {
             </button>
 
             <button
-              onClick={() => setActiveTab("tests")}
+              onClick={() => {
+                setActiveTab("tests");
+                setWizardStep(15);
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === "tests"
                   ? "bg-white text-brand shadow-sm"
@@ -427,7 +606,10 @@ export default function RecordEditor({ id }: { id: string }) {
             </button>
 
             <button
-              onClick={() => setActiveTab("signatures")}
+              onClick={() => {
+                setActiveTab("signatures");
+                setWizardStep(16);
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === "signatures"
                   ? "bg-white text-brand shadow-sm"
@@ -518,6 +700,118 @@ export default function RecordEditor({ id }: { id: string }) {
         {/* ─────────── TAB 1: รายการตรวจ ITP ─────────── */}
         {activeTab === "checklist" && (
           <div>
+            {/* ─────────── Stepper & ตัวเลือกมุมมอง (Wizard Mode vs All Sections) ─────────── */}
+            <div className="card p-3.5 mb-4 border-line/80 shadow-sm bg-card">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-ink2">โหมดแสดงผล:</span>
+                  <div className="inline-flex p-0.5 bg-sunken rounded-lg border border-line text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("wizard")}
+                      className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+                        viewMode === "wizard"
+                          ? "bg-brand text-white shadow-sm font-bold"
+                          : "text-ink2 hover:text-ink"
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>ทีละหน้า (Step Wizard)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("all")}
+                      className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+                        viewMode === "all"
+                          ? "bg-brand text-white shadow-sm font-bold"
+                          : "text-ink2 hover:text-ink"
+                      }`}
+                    >
+                      <LayoutList className="w-3.5 h-3.5" />
+                      <span>แสดงทุกหมวด (All)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {viewMode === "wizard" && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-ink3 font-medium">สลับไปหมวด:</span>
+                    <select
+                      value={wizardStep}
+                      onChange={(e) => {
+                        const step = Number(e.target.value);
+                        setWizardStep(step);
+                        if (step < 15) setActiveTab("checklist");
+                        else if (step === 15) setActiveTab("tests");
+                        else setActiveTab("signatures");
+                      }}
+                      className="text-xs font-bold py-1.5 px-3 rounded-lg border border-line bg-card text-ink focus:ring-2 focus:ring-brand/30 cursor-pointer"
+                    >
+                      {checklist.sections.map((s, idx) => (
+                        <option key={s.id} value={idx}>
+                          #{s.code} {s.name} ({getSectionCategory(s.code).name})
+                        </option>
+                      ))}
+                      <option value={15}>#15 ผลทดสอบทางวิศวกรรม</option>
+                      <option value={16}>#16 ลงนาม & การอนุมัติ</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* ข้อมูลความคืบหน้าของหมวดปัจจุบันในโหมด Wizard */}
+              {viewMode === "wizard" && wizardStep < checklist.sections.length && (() => {
+                const curSec = checklist.sections[wizardStep];
+                const cat = getSectionCategory(curSec.code);
+                const curSt = perSection[curSec.id] || { total: 0, pass: 0, fail: 0, filled: 0 };
+                const pct = curSt.total > 0 ? Math.round((curSt.filled / curSt.total) * 100) : 0;
+                const photoCheck = validateStepPhotos(wizardStep);
+
+                return (
+                  <div className="mt-3 pt-3 border-t border-line/70">
+                    <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-ink">
+                          ขั้นตอนที่ <strong className="text-brand font-display text-sm">{wizardStep + 1}</strong> / 17:
+                        </span>
+                        <span className="text-xs font-bold text-ink">
+                          #{curSec.code} {curSec.name}
+                        </span>
+                        <span className={`chip ${cat.badgeBg} ${cat.badgeText} ${cat.badgeBorder} font-bold text-[11px]`}>
+                          ● {cat.name}
+                        </span>
+                        {photoCheck.missingCount > 0 && (
+                          <span className="chip bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[11px] font-bold animate-pulse">
+                            📷 บังคับแนบรูป {photoCheck.missingCount} ข้อ
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-semibold text-ink2 tnum">
+                        ตรวจแล้ว {curSt.filled}/{curSt.total} ข้อ ({pct}%)
+                      </div>
+                    </div>
+
+                    <div className="w-full h-2 rounded-full bg-line overflow-hidden flex">
+                      <div
+                        className="bg-pass transition-all duration-300"
+                        style={{ width: `${(curSt.pass / (curSt.total || 1)) * 100}%` }}
+                      />
+                      <div
+                        className="bg-fail transition-all duration-300"
+                        style={{ width: `${(curSt.fail / (curSt.total || 1)) * 100}%` }}
+                      />
+                      <div
+                        className="bg-na transition-all duration-300"
+                        style={{
+                          width: `${(Math.max(0, curSt.filled - curSt.pass - curSt.fail) / (curSt.total || 1)) * 100}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* ตัวกรอง & เครื่องมือ */}
             <div className="flex items-center gap-2 mb-4 flex-wrap no-print">
               <div className="flex gap-1 p-1 bg-card border border-line rounded-xl shadow-sm">
@@ -545,33 +839,37 @@ export default function RecordEditor({ id }: { id: string }) {
                 })}
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  const next: Record<string, boolean> = {};
-                  checklist.sections.forEach((s) => (next[s.id] = !allOpen));
-                  setOpen(next);
-                }}
-                className="ml-auto text-xs font-bold text-brand bg-card border border-line hover:bg-sunken px-3 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
-              >
-                {allOpen ? (
-                  <>
-                    <ChevronUp className="w-4 h-4" />
-                    <span>ย่อทุกหมวด</span>
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="w-4 h-4" />
-                    <span>ขยายทุกหมวด</span>
-                  </>
-                )}
-              </button>
+              {viewMode === "all" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next: Record<string, boolean> = {};
+                    checklist.sections.forEach((s) => (next[s.id] = !allOpen));
+                    setOpen(next);
+                  }}
+                  className="ml-auto text-xs font-bold text-brand bg-card border border-line hover:bg-sunken px-3 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                >
+                  {allOpen ? (
+                    <>
+                      <ChevronUp className="w-4 h-4" />
+                      <span>ย่อทุกหมวด</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-4 h-4" />
+                      <span>ขยายทุกหมวด</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
-            {/* วนลูปหมวดงานทั้ง 10 หมวด */}
-            {checklist.sections.map((sec) => {
+            {/* วนลูปหมวดงานทั้ง 15 หมวด */}
+            {checklist.sections.map((sec, secIdx) => {
+              if (viewMode === "wizard" && secIdx !== wizardStep) return null;
+              const cat = getSectionCategory(sec.code);
               const st = perSection[sec.id] || { total: 0, pass: 0, fail: 0, filled: 0 };
-              const isOpen = open[sec.id] || filter !== "all";
+              const isOpen = viewMode === "wizard" || open[sec.id] || filter !== "all";
               const done = st.filled === st.total && st.total > 0;
 
               const visibleCount = sec.blocks.reduce(
@@ -581,13 +879,13 @@ export default function RecordEditor({ id }: { id: string }) {
               if (filter !== "all" && visibleCount === 0) return null;
 
               return (
-                <section key={sec.id} className="card overflow-hidden mb-3.5 border-line/80">
+                <section key={sec.id} className={`card overflow-hidden mb-3.5 border-line/80 ${cat.cardBorder}`}>
                   <div className="flex items-center justify-between p-3.5 sm:px-5 bg-card hover:bg-sunken/40 transition-colors">
                     <button
                       type="button"
                       onClick={() => setOpen((o) => ({ ...o, [sec.id]: !o[sec.id] }))}
                       aria-expanded={isOpen}
-                      disabled={filter !== "all"}
+                      disabled={filter !== "all" && viewMode !== "all"}
                       className="flex-1 flex items-center gap-3 text-left min-w-0"
                     >
                       <span
@@ -597,7 +895,7 @@ export default function RecordEditor({ id }: { id: string }) {
                             ? "bg-rose-500 text-white"
                             : done
                             ? "bg-emerald-500 text-white"
-                            : "bg-sunken border border-line text-ink2"
+                            : cat.iconBg
                         }`}
                       >
                         {done && st.fail === 0 ? <Check className="w-5 h-5 stroke-[2.5]" /> : sec.code}
@@ -607,6 +905,9 @@ export default function RecordEditor({ id }: { id: string }) {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-display font-bold text-base text-ink leading-tight truncate">
                             {sec.name}
+                          </span>
+                          <span className={`chip ${cat.badgeBg} ${cat.badgeText} ${cat.badgeBorder} font-bold text-[10.5px]`}>
+                            ● {cat.name}
                           </span>
                           {sec.optional && (
                             <span className="chip bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold">
@@ -1028,47 +1329,77 @@ export default function RecordEditor({ id }: { id: string }) {
         </div>
       )}
 
-      {/* ─────────── แถบลอยบันทึกด้านล่าง (Action Bottom Bar) ─────────── */}
+      {/* ─────────── แถบลอยบันทึกด้านล่างพร้อมปุ่ม Wizard Next / Prev ─────────── */}
       <div
         className="fixed bottom-0 inset-x-0 z-30 bg-card/95 backdrop-blur-md border-t border-line/80 shadow-bar no-print"
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom, 0px))" }}
       >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 text-xs sm:text-sm font-bold">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
+          {/* ปุ่มย้อนกลับ */}
+          <button
+            type="button"
+            onClick={handlePrevStep}
+            disabled={wizardStep === 0}
+            className={`min-h-[42px] px-3.5 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-1.5 ${
+              wizardStep === 0
+                ? "opacity-40 text-ink3 cursor-not-allowed bg-sunken"
+                : "bg-card border border-line text-ink hover:bg-sunken shadow-sm active:scale-95"
+            }`}
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">ก่อนหน้า</span>
+          </button>
+
+          {/* สถิติรวมและสถานะการบันทึก */}
+          <div className="flex-1 min-w-0 text-center px-1">
+            <div className="flex items-center justify-center gap-2 text-xs sm:text-sm font-bold flex-wrap">
               <span className="tnum text-pass flex items-center gap-1">
-                <Check className="w-4 h-4 stroke-[2.5]" />
+                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                 <span>{tally.pass} ผ่าน</span>
               </span>
               <span className="tnum text-fail flex items-center gap-1">
-                <X className="w-4 h-4 stroke-[2.5]" />
+                <X className="w-3.5 h-3.5 stroke-[2.5]" />
                 <span>{tally.fail} ไม่ผ่าน</span>
               </span>
-              <span className="tnum text-ink3">เหลือ {TOTAL - tally.filled} ข้อ</span>
+              <span className="tnum text-ink3 hidden md:inline">เหลือ {TOTAL - tally.filled} ข้อ</span>
             </div>
-            <div className="flex items-center gap-1.5 text-[12px] text-ink2 mt-0.5 truncate">
-              {dirty && (
-                <span aria-hidden className="w-2 h-2 rounded-full bg-amber-500 shrink-0 animate-ping" />
-              )}
-              <span className="truncate font-medium">
-                {dirty ? "มีการแก้ไขที่ยังไม่ได้บันทึก" : statusMsg}
-              </span>
+            <div className="text-[11px] text-ink3 truncate font-medium mt-0.5">
+              {viewMode === "wizard"
+                ? `ขั้นตอนที่ ${wizardStep + 1} / 17 · ${dirty ? "มีการแก้ไขที่ยังไม่ได้บันทึก" : statusMsg}`
+                : dirty
+                ? "มีการแก้ไขที่ยังไม่ได้บันทึก"
+                : statusMsg}
             </div>
           </div>
 
+          {/* ปุ่มบันทึก & ปุ่มถัดไป */}
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={save}
               disabled={saving || !dirty}
-              className={`min-h-[46px] px-6 sm:px-8 rounded-xl font-display font-bold text-sm sm:text-base transition-all active:scale-95 shadow-md flex items-center gap-2 ${
+              className={`min-h-[42px] px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm flex items-center gap-1.5 ${
                 dirty
-                  ? "bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25"
-                  : "bg-line text-ink3 opacity-70 cursor-not-allowed"
+                  ? "bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25 active:scale-95"
+                  : "bg-sunken border border-line text-ink3 opacity-70 cursor-not-allowed"
               }`}
             >
-              <Save className="w-4 h-4" />
-              <span>{saving ? "กำลังบันทึก…" : dirty ? "บันทึกข้อมูล" : "บันทึกแล้ว"}</span>
+              <Save className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{saving ? "กำลังบันทึก…" : dirty ? "บันทึก" : "บันทึกแล้ว"}</span>
+            </button>
+
+            {/* ปุ่มขั้นตอนถัดไป */}
+            <button
+              type="button"
+              onClick={handleNextStep}
+              className={`min-h-[42px] px-4 sm:px-6 rounded-xl font-display font-bold text-xs sm:text-sm transition-all active:scale-95 shadow-md flex items-center gap-1.5 ${
+                wizardStep >= 16
+                  ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25"
+                  : "bg-brand hover:bg-brand/90 text-white shadow-brand/25"
+              }`}
+            >
+              <span>{wizardStep >= 16 ? "ตรวจเสร็จสิ้น" : "ถัดไป"}</span>
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>

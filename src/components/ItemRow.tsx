@@ -40,7 +40,12 @@ function ItemRow({
   const needReason = r.status === "fail" && !(r.note || "").trim();
 
   return (
-    <div className={`relative border-b border-line/70 last:border-b-0 transition-colors ${r.status === "fail" ? "bg-fail/[0.02]" : ""}`}>
+    <div
+      id={`item-row-${itemKey}`}
+      className={`relative border-b border-line/70 last:border-b-0 transition-colors ${
+        r.status === "fail" ? "bg-fail/[0.02]" : ""
+      } ${needPhoto ? "ring-1 ring-inset ring-amber-500/40 bg-amber-500/[0.03]" : ""}`}
+    >
       <span
         aria-hidden
         className={`absolute left-0 top-0 bottom-0 w-1 transition-all duration-200 ${
@@ -186,12 +191,12 @@ function ItemRow({
 
         {/* ── เตือนเมื่อข้อมูลยังไม่ครบตามที่ ITP บังคับ ── */}
         {(needPhoto || needReason) && (
-          <div className="flex items-center gap-2 mt-2.5 text-[12px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-lg">
+          <div className="flex items-center gap-2 mt-2.5 text-[12px] font-medium text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/30 px-3 py-2 rounded-lg animate-pulse">
             <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <span>
               {needReason && "ต้องระบุสาเหตุที่ไม่ผ่านในหมายเหตุ"}
               {needReason && needPhoto && " และ "}
-              {needPhoto && "รายการนี้กำหนดให้ต้องแนบรูปถ่ายยืนยัน"}
+              {needPhoto && "⚠️ ข้อนี้กำหนดให้ต้องแนบภาพถ่ายหน้างานจริงก่อน จึงจะดำเนินการต่อได้"}
             </span>
           </div>
         )}
