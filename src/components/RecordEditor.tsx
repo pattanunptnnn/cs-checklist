@@ -14,6 +14,7 @@ import type {
 import ItemRow from "./ItemRow";
 import PhotoUploader from "./PhotoUploader";
 import QRCheckIn from "./QRCheckIn";
+import SiteSelfieModal from "./SiteSelfieModal";
 import UserNav from "./UserNav";
 import { useAuth } from "./AuthProvider";
 import {
@@ -281,6 +282,32 @@ export default function RecordEditor({ id }: { id: string }) {
     setDirty(true);
     setRecord((prev) => (prev ? { ...prev, checkIn: null } : prev));
   }, []);
+
+  const [isSelfieModalOpen, setIsSelfieModalOpen] = useState(false);
+
+  const handleSaveSelfie = useCallback(async (photoUrl: string) => {
+    setDirty(true);
+    setRecord((prev) => {
+      if (!prev) return prev;
+      const existing = prev.checkIn || {
+        timestamp: new Date().toISOString(),
+        inspectorName: prev.project.pm || user?.name || "วิศวกรผู้ตรวจ Big-C PM",
+        siteCode: prev.project.storeCode ? `BIGC-SITE-${prev.project.storeCode}` : "BIGC-SITE",
+        address: prev.project.store || "หน้างาน Big-C",
+        verified: true,
+      };
+      return {
+        ...prev,
+        checkIn: {
+          ...existing,
+          verified: true,
+          selfiePhoto: photoUrl,
+          selfieTimestamp: new Date().toISOString(),
+        },
+      };
+    });
+    setStatusMsg("บันทึกภาพ Selfie หน้างานสำเร็จ");
+  }, [user]);
 
   // ตรวจสอบว่าในหมวดปัจจุบัน มีข้อที่บังคับรูปแล้วยังไม่ได้แนบหรือไม่
   const validateStepPhotos = useCallback(
@@ -651,10 +678,11 @@ export default function RecordEditor({ id }: { id: string }) {
           <QRCheckIn
             storeName={record.project.store}
             storeCode={record.project.storeCode}
-            pmName={record.project.pm}
+            pmName={record.project.pm || user?.name}
             checkIn={record.checkIn}
             onCheckIn={handleCheckIn}
             onClearCheckIn={handleClearCheckIn}
+            onOpenSelfie={() => setIsSelfieModalOpen(true)}
           />
         </div>
 
@@ -1241,6 +1269,83 @@ export default function RecordEditor({ id }: { id: string }) {
               </div>
             </div>
 
+            {/* กล่องแสดงหลักฐานรูปถ่าย Selfie ยืนยันหน้างานของ PM */}
+            <div className="card p-4 border-line/80">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-brand" />
+                  <h3 className="font-bold text-sm text-ink">
+                    รูปถ่าย Selfie ยืนยันตัวตนคู่กับหน้าไซต์งานของ PM
+                  </h3>
+                </div>
+                {record.checkIn?.selfiePhoto ? (
+                  <span className="chip bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                    ✓ มีหลักฐาน Selfie แล้ว
+                  </span>
+                ) : (
+                  <span className="chip bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-[10px] font-bold animate-pulse">
+                    ⚠️ บังคับ: ยังไม่มีรูปถ่าย Selfie
+                  </span>
+                )}
+              </div>
+
+              {record.checkIn?.selfiePhoto ? (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/20">
+                  <img
+                    src={record.checkIn.selfiePhoto}
+                    alt="PM Selfie Proof"
+                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-cover border border-line shadow-sm shrink-0"
+                  />
+                  <div className="text-xs text-ink2 space-y-1">
+                    <div className="font-bold text-ink text-sm">
+                      ยืนยันการเข้าพื้นที่จริง: {record.checkIn.inspectorName || record.project.pm}
+                    </div>
+                    <div>
+                      📍 <strong>สถานที่:</strong> {record.checkIn.address || record.project.store || "ไซต์งาน Big-C"}
+                    </div>
+                    {record.checkIn.lat && record.checkIn.lng && (
+                      <div>
+                        🛰️ <strong>พิกัด GPS:</strong> {record.checkIn.lat.toFixed(5)}, {record.checkIn.lng.toFixed(5)}
+                      </div>
+                    )}
+                    <div className="text-ink3 text-[11px] pt-1">
+                      ⏰ บันทึกเมื่อ {new Date(record.checkIn.selfieTimestamp || record.checkIn.timestamp).toLocaleString("th-TH")} น.
+                    </div>
+                  </div>
+                  <div className="sm:ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => setIsSelfieModalOpen(true)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-card border border-line hover:border-brand text-brand transition-colors"
+                    >
+                      ถ่ายใหม่
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-rose-500/5 p-3.5 rounded-xl border border-rose-500/25">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-xs sm:text-sm text-rose-700 dark:text-rose-400">
+                        ยังไม่มีรูปถ่าย Selfie ยืนยันตัวตนหน้าไซต์งาน
+                      </div>
+                      <p className="text-xs text-ink3 mt-0.5">
+                        ระบบกำหนดให้วิศวกรผู้ตรวจ (PM) ต้องถ่ายภาพ Selfie คู่กับหน้างานก่อสร้างจริงก่อน จึงจะสามารถลงนามตรวจรับได้
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSelfieModalOpen(true)}
+                    className="btn-primary text-xs py-2 px-3.5 font-bold shadow-md shadow-brand/20 whitespace-nowrap self-end sm:self-center shrink-0"
+                  >
+                    📸 ถ่ายภาพ Selfie ตอนนี้
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* การลงนาม 3 ฝ่าย */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {checklist.signRoles.map(([roleKey, roleLabel]) => {
@@ -1290,11 +1395,18 @@ export default function RecordEditor({ id }: { id: string }) {
                       {canSignThis ? (
                         <button
                           type="button"
-                          onClick={() => updateSignature(roleKey, {
-                            signed: !sig.signed,
-                            name: sig.name || user?.name || "",
-                            date: sig.date || new Date().toISOString().slice(0, 10),
-                          })}
+                          onClick={() => {
+                            if (!sig.signed && !record.checkIn?.selfiePhoto && (roleKey === "prep" || roleKey === "check")) {
+                              alert("⚠️ ระบบบังคับ: กรุณาถ่ายภาพ Selfie คู่กับหน้าไซต์งานจริงเพื่อยืนยันตัวตนก่อนลงนามรับรอง");
+                              setIsSelfieModalOpen(true);
+                              return;
+                            }
+                            updateSignature(roleKey, {
+                              signed: !sig.signed,
+                              name: sig.name || user?.name || "",
+                              date: sig.date || new Date().toISOString().slice(0, 10),
+                            });
+                          }}
                           className={`w-full py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                             sig.signed
                               ? "bg-pass/10 text-pass border border-pass/30"
@@ -1469,6 +1581,25 @@ export default function RecordEditor({ id }: { id: string }) {
           </div>
         </div>
       </div>
+
+      {/* Modal ถ่ายภาพ Selfie คู่หน้าไซต์งาน (บังคับ) */}
+      <SiteSelfieModal
+        isOpen={isSelfieModalOpen}
+        onClose={() => setIsSelfieModalOpen(false)}
+        pmName={record?.project.pm || user?.name}
+        storeName={record?.project.store}
+        storeCode={record?.project.storeCode}
+        coords={
+          record?.checkIn?.lat && record?.checkIn?.lng
+            ? {
+                lat: record.checkIn.lat,
+                lng: record.checkIn.lng,
+                accuracy: record.checkIn.accuracy,
+              }
+            : null
+        }
+        onSaveSelfie={handleSaveSelfie}
+      />
     </div>
   );
 }

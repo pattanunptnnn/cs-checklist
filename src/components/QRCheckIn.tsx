@@ -33,6 +33,7 @@ interface QRCheckInProps {
   checkIn?: CheckInData | null;
   onCheckIn: (data: CheckInData) => void;
   onClearCheckIn?: () => void;
+  onOpenSelfie?: () => void;
 }
 
 export default function QRCheckIn({
@@ -42,6 +43,7 @@ export default function QRCheckIn({
   checkIn,
   onCheckIn,
   onClearCheckIn,
+  onOpenSelfie,
 }: QRCheckInProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
@@ -52,6 +54,7 @@ export default function QRCheckIn({
   const [errorMsg, setErrorMsg] = useState("");
   const [scannerStatus, setScannerStatus] = useState("");
   const [gpsData, setGpsData] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [previewSelfie, setPreviewSelfie] = useState<string | null>(null);
 
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -176,6 +179,8 @@ export default function QRCheckIn({
       accuracy: loc?.accuracy,
       address: storeName ? `${storeName} (${storeCode || "-"})` : "หน้างาน Big-C Mini",
       verified: true,
+      selfiePhoto: checkIn?.selfiePhoto,
+      selfieTimestamp: checkIn?.selfieTimestamp,
     };
 
     onCheckIn(checkInData);
@@ -320,6 +325,8 @@ export default function QRCheckIn({
         accuracy: loc.accuracy,
         address: storeName ? `${storeName}` : "ไซต์งาน Big-C Mini",
         verified: true,
+        selfiePhoto: checkIn?.selfiePhoto,
+        selfieTimestamp: checkIn?.selfieTimestamp,
       };
       onCheckIn(checkInData);
       setIsOpen(false);
@@ -512,7 +519,125 @@ export default function QRCheckIn({
             </div>
           </div>
         )}
+
+        {/* ────────── แถวสถานะการถ่ายภาพ Selfie ยืนยันตัวตนคู่กับหน้าไซต์งาน (บังคับ) ────────── */}
+        <div className="mt-3 pt-3 border-t border-line/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {checkIn?.selfiePhoto ? (
+              <div className="relative group shrink-0">
+                <img
+                  src={checkIn.selfiePhoto}
+                  alt="Selfie ยืนยันหน้างาน"
+                  onClick={() => setPreviewSelfie(checkIn.selfiePhoto || null)}
+                  className="w-12 h-12 rounded-xl object-cover border-2 border-emerald-500 cursor-pointer shadow-sm group-hover:scale-105 transition-transform"
+                />
+                <button
+                  type="button"
+                  onClick={() => setPreviewSelfie(checkIn.selfiePhoto || null)}
+                  title="ดูรูปภาพขนาดเต็ม"
+                  className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="w-12 h-12 rounded-xl bg-rose-500/10 border-2 border-dashed border-rose-400 text-rose-600 grid place-items-center shrink-0">
+                <Camera className="w-5 h-5" />
+              </div>
+            )}
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-xs sm:text-sm text-ink">
+                  รูปถ่าย Selfie ยืนยันตัวตนคู่กับหน้างาน
+                </span>
+                {checkIn?.selfiePhoto ? (
+                  <span className="chip bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                    ✓ ถ่ายยืนยันแล้ว
+                  </span>
+                ) : (
+                  <span className="chip bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-[10px] font-bold">
+                    ⚠️ ยังไม่ถ่าย (บังคับ)
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-ink3 mt-0.5 truncate">
+                {checkIn?.selfiePhoto
+                  ? `ถ่ายเมื่อ ${new Date(checkIn.selfieTimestamp || checkIn.timestamp).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น. (มีลายน้ำพิกัด & วันเวลา)`
+                  : "บังคับถ่ายภาพ Selfie ตัวเองคู่กับหน้างานก่อสร้างจริงเพื่อป้องกันการเช็คชื่อแทน"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            {checkIn?.selfiePhoto ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setPreviewSelfie(checkIn.selfiePhoto || null)}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-sunken hover:bg-card border border-line text-ink2 transition-colors flex items-center gap-1.5"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>ดูภาพ</span>
+                </button>
+                {onOpenSelfie && (
+                  <button
+                    type="button"
+                    onClick={onOpenSelfie}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-sunken hover:bg-card border border-line text-brand transition-colors flex items-center gap-1.5"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>ถ่ายใหม่</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              onOpenSelfie && (
+                <button
+                  type="button"
+                  onClick={onOpenSelfie}
+                  className="btn-primary text-xs py-2 px-3.5 font-bold shadow-md shadow-brand/20 flex items-center gap-1.5"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>📸 ถ่ายรูป Selfie หน้างาน</span>
+                </button>
+              )
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Lightbox สำหรับดูรูป Selfie ขนาดเต็ม */}
+      {previewSelfie && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md grid place-items-center p-4 animate-in fade-in duration-150 no-print"
+          onClick={() => setPreviewSelfie(null)}
+        >
+          <div
+            className="relative max-w-3xl w-full max-h-[90vh] flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewSelfie(null)}
+              className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={previewSelfie}
+              alt="Full size selfie"
+              className="max-h-[82vh] w-auto object-contain rounded-2xl shadow-2xl border border-white/20"
+            />
+            <div className="mt-3 text-center text-xs text-white/80 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>ภาพ Selfie ประจำไซต์งานพร้อมลายน้ำพิกัดและเวลาที่บันทึกจริง</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ────────── MODAL สแกน QR CODE + GPS ────────── */}
       {isOpen && (

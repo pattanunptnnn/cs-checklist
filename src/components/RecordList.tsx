@@ -408,7 +408,16 @@ export default function RecordList() {
                         {r.checkInVerified && (
                           <span className="chip bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-bold inline-flex items-center gap-1">
                             <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                            <span>เช็คอินหน้างานแล้ว</span>
+                            <span>เช็คอินแล้ว</span>
+                          </span>
+                        )}
+                        {r.checkIn?.selfiePhoto ? (
+                          <span className="chip bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25 text-[11px] font-bold inline-flex items-center gap-1">
+                            <span>📸 Selfie แล้ว</span>
+                          </span>
+                        ) : (
+                          <span className="chip bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 text-[11px] font-bold inline-flex items-center gap-1">
+                            <span>⚠️ ขาดรูป Selfie</span>
                           </span>
                         )}
                       </div>

@@ -28,6 +28,8 @@ import {
   ArrowLeft,
   RefreshCw,
   Wrench,
+  Camera,
+  X,
 } from "lucide-react";
 import UserNav from "./UserNav";
 
@@ -109,6 +111,7 @@ export default function PMDashboard() {
   const [selectedPm, setSelectedPm] = useState<string>("all");
   const [punctFilter, setPunctFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [previewSelfie, setPreviewSelfie] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -157,6 +160,7 @@ export default function PMDashboard() {
         punctuality,
         punctualityNote,
         verified,
+        selfiePhoto: r.selfiePhoto || r.checkIn?.selfiePhoto,
         lat: r.checkIn?.lat,
         lng: r.checkIn?.lng,
         accuracy: r.checkIn?.accuracy,
@@ -695,6 +699,22 @@ export default function PMDashboard() {
                             ✓ GPS หน้างานจริง
                           </span>
                         )}
+
+                        {v.selfiePhoto ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewSelfie(v.selfiePhoto || null)}
+                            className="chip bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30 text-[10.5px] font-bold hover:bg-sky-500/25 transition-colors cursor-pointer flex items-center gap-1"
+                            title="คลิกเพื่อดูรูปถ่าย Selfie คู่หน้างาน"
+                          >
+                            <Camera className="w-3 h-3 text-sky-600" />
+                            <span>ดูรูป Selfie ✓</span>
+                          </button>
+                        ) : (
+                          <span className="chip bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[10.5px] font-bold">
+                            ⚠️ ขาด Selfie
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-3 text-xs text-ink2 mt-1.5 flex-wrap">
@@ -770,6 +790,38 @@ export default function PMDashboard() {
           )}
         </section>
       </main>
+
+      {/* Lightbox สำหรับดูรูป Selfie ขนาดเต็ม */}
+      {previewSelfie && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md grid place-items-center p-4 animate-in fade-in duration-150 no-print"
+          onClick={() => setPreviewSelfie(null)}
+        >
+          <div
+            className="relative max-w-3xl w-full max-h-[90vh] flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewSelfie(null)}
+              className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={previewSelfie}
+              alt="PM Selfie Verification"
+              className="max-h-[82vh] w-auto object-contain rounded-2xl shadow-2xl border border-white/20"
+            />
+            <div className="mt-3 text-center text-xs text-white/80 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>หลักฐานรูปถ่าย Selfie ยืนยันการเข้าพื้นที่หน้าไซต์งานของ PM จริง</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -73,7 +73,7 @@ export interface SignatureData {
   signed?: boolean;
 }
 
-// ข้อมูลการเช็คอินหน้างานของ PM ด้วย QR Code + GPS
+// ข้อมูลการเช็คอินหน้างานของ PM ด้วย QR Code + GPS + ถ่ายภาพ Selfie
 export interface CheckInData {
   timestamp: string;      // เวลาที่สแกนเช็คอิน ISO
   inspectorName?: string; // ชื่อ PM หรือผู้ตรวจ
@@ -83,6 +83,8 @@ export interface CheckInData {
   accuracy?: number;      // ความแม่นยำ (เมตร)
   address?: string;       // รายละเอียดตำแหน่ง
   verified: boolean;      // เช็คอินสำเร็จหรือไม่
+  selfiePhoto?: string;   // รูป Selfie ยืนยันตัวตนคู่กับหน้าไซต์งานจริง (บังคับ)
+  selfieTimestamp?: string; // เวลาที่ถ่าย Selfie
 }
 
 // ใบตรวจรับ 1 ใบ
@@ -110,6 +112,8 @@ export interface RecordSummary {
   approvalStatus?: string;
   checkInVerified?: boolean;
   checkIn?: CheckInData | null;
+  hasSelfie?: boolean;
+  selfiePhoto?: string;
 }
 
 // สถานะความตรงต่อเวลา
@@ -127,6 +131,7 @@ export interface PMSiteVisit {
   punctuality: PunctualityStatus;
   punctualityNote: string;
   verified: boolean;
+  selfiePhoto?: string;
   lat?: number;
   lng?: number;
   accuracy?: number;

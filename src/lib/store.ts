@@ -66,6 +66,8 @@ export async function listRecords(): Promise<RecordSummary[]> {
             approvalStatus: rec.approvalStatus,
             checkInVerified: Boolean(rec.checkIn?.verified),
             checkIn: rec.checkIn,
+            hasSelfie: Boolean(rec.checkIn?.selfiePhoto),
+            selfiePhoto: rec.checkIn?.selfiePhoto,
           };
         });
       }
@@ -93,6 +95,8 @@ export async function listRecords(): Promise<RecordSummary[]> {
         approvalStatus: rec.approvalStatus || undefined,
         checkInVerified: Boolean(rec.checkIn?.verified),
         checkIn: rec.checkIn || null,
+        hasSelfie: Boolean(rec.checkIn?.selfiePhoto),
+        selfiePhoto: rec.checkIn?.selfiePhoto,
       });
     } catch {
       // ข้ามไฟล์ที่เสีย
