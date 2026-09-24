@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   SwitchCamera,
   Upload,
+  Image as ImageIcon,
 } from "lucide-react";
 
 interface SiteSelfieModalProps {
@@ -36,6 +37,7 @@ export default function SiteSelfieModal({
   onSaveSelfie,
 }: SiteSelfieModalProps) {
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -44,75 +46,104 @@ export default function SiteSelfieModal({
   const [cameraError, setCameraError] = useState("");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const nativeInputRef = useRef<HTMLInputElement | null>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
-  // หยุดกล้องเมื่อปิด Modal
+  // หยุดกล้องและคืนทรัพยากร
   const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
     }
+    setStream(null);
     setIsCameraActive(false);
-  }, []);
+  }, [stream]);
 
-  // เริ่มต้นกล้อง
+  // เริ่มต้นเปิดกล้อง Live Video
   const startCamera = useCallback(async () => {
     setCameraError("");
     setErrorMsg("");
-    stopCamera();
+
+    // หยุด stream เดิมก่อน
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+    setIsCameraActive(false);
 
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setCameraError("เบราว์เซอร์นี้ไม่รองรับการเปิดกล้องสด กรุณาใช้ปุ่มถ่ายด้วยกล้องมือถือด้านล่าง");
+      setCameraError("เบราว์เซอร์นี้ไม่รองรับการเปิดกล้องสด กรุณากดปุ่ม 'เปิดกล้องมือถือ' ด้านล่าง");
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: facingMode },
-          width: { ideal: 1280 },
-          height: { ideal: 960 },
-        },
-        audio: false,
-      });
+      let mediaStream: MediaStream | null = null;
 
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => {});
-      }
-      setIsCameraActive(true);
-    } catch (err: any) {
-      console.warn("Could not start camera with facingMode:", facingMode, err);
-      // Fallback ลองเปิดกล้องใดๆ ที่มี
+      // พยายามเปิดตาม facingMode ที่ต้องการ
       try {
-        const streamFallback = await navigator.mediaDevices.getUserMedia({
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: facingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 960 },
+          },
+          audio: false,
+        });
+      } catch (err1) {
+        console.warn("Attempt 1 with resolution failed, trying basic facingMode:", err1);
+        try {
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: facingMode },
+            audio: false,
+          });
+        } catch (err2) {
+          console.warn("Attempt 2 failed, trying any video stream:", err2);
+        }
+      }
+
+      // Fallback ครั้งสุดท้าย: เปิดกล้องใดๆ ที่มี
+      if (!mediaStream) {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: false,
         });
-        streamRef.current = streamFallback;
-        if (videoRef.current) {
-          videoRef.current.srcObject = streamFallback;
-          await videoRef.current.play().catch(() => {});
-        }
-        setIsCameraActive(true);
-      } catch (fallbackErr: any) {
-        setCameraError("ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตสิทธิ์การเข้าถึงกล้อง หรือใช้ปุ่มถ่ายภาพมือถือด้านล่าง");
       }
-    }
-  }, [facingMode, stopCamera]);
 
+      setStream(mediaStream);
+      setIsCameraActive(true);
+    } catch (err: any) {
+      console.warn("getUserMedia failed completely:", err);
+      setCameraError(
+        "ไม่สามารถเปิดกล้องได้ (อาจยังไม่อนุญาตสิทธิ์ Camera หรือไม่มีกล้อง) กรุณากดปุ่ม 'ถ่ายด้วยกล้องมือถือ' ด้านล่าง"
+      );
+    }
+  }, [facingMode, stream]);
+
+  // ผูก MediaStream กับ <video> element เสมอ
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && stream) {
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        video.play().catch((playErr) => {
+          console.warn("Video play error:", playErr);
+        });
+      };
+    }
+  }, [stream]);
+
+  // ควบคุมการเปิด/ปิดกล้องตามสถานะ Modal
   useEffect(() => {
     if (isOpen && !previewUrl) {
       startCamera();
+    } else {
+      stopCamera();
     }
     return () => {
       stopCamera();
     };
-  }, [isOpen, previewUrl, startCamera, stopCamera]);
+  }, [isOpen, previewUrl]);
 
-  // สลับระหว่างกล้องหน้าและกล้องหลัง
+  // สลับกล้องหน้า / กล้องหลัง
   const toggleFacingMode = () => {
     setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
   };
@@ -120,7 +151,6 @@ export default function SiteSelfieModal({
   // ประทับลายน้ำลงบนรูปภาพ
   const stampWatermark = async (imageSource: CanvasImageSource, width: number, height: number): Promise<Blob> => {
     const canvas = document.createElement("canvas");
-    // จำกัดความละเอียดสูงสุด
     const MAX_DIM = 1600;
     let targetW = width;
     let targetH = height;
@@ -135,13 +165,12 @@ export default function SiteSelfieModal({
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas context is not available");
 
-    // วาดรูปถ่าย
-    // หากใช้กล้องหน้า (user) ในโหมด Live ให้กลับด้านแบบกระจกเพื่อให้เหมือนที่เห็นในจอ
+    // วาดภาพถ่าย
     if (facingMode === "user" && isCameraActive) {
       ctx.translate(targetW, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(imageSource, 0, 0, targetW, targetH);
-      ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
     } else {
       ctx.drawImage(imageSource, 0, 0, targetW, targetH);
     }
@@ -174,7 +203,6 @@ export default function SiteSelfieModal({
       ? `🛰️ พิกัด GPS: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)} ${coords.accuracy ? `(±${coords.accuracy}ม.)` : ""}`
       : "";
 
-    // วัดความกว้างสูงสุด
     ctx.font = `bold ${fontSizeTitle}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
     const w1 = ctx.measureText(line1).width;
     ctx.font = `600 ${fontSizeBody}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
@@ -191,9 +219,8 @@ export default function SiteSelfieModal({
     const boxX = margin;
     const boxY = targetH - boxHeight - margin;
 
-    // แผ่นป้ายสไตล์ Frosted Dark Glass
     ctx.save();
-    ctx.fillStyle = "rgba(7, 23, 43, 0.82)";
+    ctx.fillStyle = "rgba(7, 23, 43, 0.84)";
     ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
     ctx.lineWidth = Math.max(1, Math.round(1.5 * scale));
 
@@ -203,35 +230,29 @@ export default function SiteSelfieModal({
     ctx.fill();
     ctx.stroke();
 
-    // ประทับข้อความ
     let currentY = boxY + padY + fontSizeTitle - 2;
 
-    // Line 1: Header Badge
-    ctx.fillStyle = "#10b981"; // Emerald
+    ctx.fillStyle = "#10b981";
     ctx.font = `bold ${fontSizeTitle}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
     ctx.fillText(`✓ ${line1}`, boxX + padX, currentY);
 
-    // Line 2: PM
     currentY += lineGap;
     ctx.fillStyle = "#ffffff";
     ctx.font = `600 ${fontSizeBody}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
     ctx.fillText(line2, boxX + padX, currentY);
 
-    // Line 3: Store
     currentY += lineGap;
     ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
     ctx.font = `400 ${fontSizeBody}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
     ctx.fillText(line3, boxX + padX, currentY);
 
-    // Line 4: Time
     currentY += lineGap;
     ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
     ctx.fillText(line4, boxX + padX, currentY);
 
-    // Line 5: GPS
     if (line5) {
       currentY += lineGap;
-      ctx.fillStyle = "#38bdf8"; // Sky blue
+      ctx.fillStyle = "#38bdf8";
       ctx.font = `500 ${fontSizeBody}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
       ctx.fillText(line5, boxX + padX, currentY);
     }
@@ -252,14 +273,17 @@ export default function SiteSelfieModal({
 
   // ถ่ายภาพจาก Live Video
   const handleCaptureFromVideo = async () => {
-    if (!videoRef.current) return;
+    const video = videoRef.current;
+    if (!video || !isCameraActive) return;
     setIsProcessing(true);
     setErrorMsg("");
 
     try {
-      const video = videoRef.current;
       const w = video.videoWidth || 1280;
       const h = video.videoHeight || 960;
+      if (w === 0 || h === 0) {
+        throw new Error("ยังไม่ได้รับภาพจากกล้อง กรุณารอสักครู่แล้วลองใหม่");
+      }
 
       const watermarkedBlob = await stampWatermark(video, w, h);
       stopCamera();
@@ -274,7 +298,7 @@ export default function SiteSelfieModal({
     }
   };
 
-  // ถ่ายภาพผ่าน Native Camera Input
+  // ถ่ายภาพผ่าน Native Camera Input หรือเลือกรูป
   const handleNativeFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -291,14 +315,15 @@ export default function SiteSelfieModal({
       const url = URL.createObjectURL(watermarkedBlob);
       setPreviewUrl(url);
     } catch (err: any) {
-      setErrorMsg("ไม่สามารถประมวลผลรูปภาพได้");
+      setErrorMsg("ไม่สามารถประมวลผลรูปภาพได้ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setIsProcessing(false);
-      if (nativeInputRef.current) nativeInputRef.current.value = "";
+      if (nativeCameraInputRef.current) nativeCameraInputRef.current.value = "";
+      if (galleryInputRef.current) galleryInputRef.current.value = "";
     }
   };
 
-  // ถ่ายใหม่ (Retake)
+  // ถ่ายใหม่
   const handleRetake = () => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
@@ -364,12 +389,21 @@ export default function SiteSelfieModal({
       className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md grid place-items-center p-3 sm:p-4 animate-in fade-in duration-150 no-print"
     >
       <div className="card max-w-lg w-full bg-card shadow-2xl overflow-hidden flex flex-col max-h-[95vh] border-line">
-        {/* Input สำหรับถ่ายด้วยกล้องมือถือ Native OS Camera */}
+        {/* Input 1: ถ่ายด้วยแอปกล้องมือถือโดยตรง (Native OS Camera) */}
         <input
-          ref={nativeInputRef}
+          ref={nativeCameraInputRef}
           type="file"
           accept="image/*"
           capture="user"
+          className="hidden"
+          onChange={handleNativeFile}
+        />
+
+        {/* Input 2: เลือกรูปจากอัลบั้ม (Gallery Fallback) */}
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
           className="hidden"
           onChange={handleNativeFile}
         />
@@ -427,54 +461,70 @@ export default function SiteSelfieModal({
                   </span>
                 </div>
               </div>
-            ) : isCameraActive ? (
-              // แสดงวิดีโอกล้องสด
-              <div className="relative w-full h-full flex items-center justify-center">
+            ) : (
+              // กล้องวิดีโอสด (มีแท็ก <video> อยู่ใน DOM เสมอ ป้องกันปัญหาจอดำ)
+              <div className="relative w-full h-full flex items-center justify-center bg-black">
                 <video
                   ref={videoRef}
                   playsInline
                   autoPlay
                   muted
-                  className={`w-full h-full object-cover ${facingMode === "user" ? "-scale-x-100" : ""}`}
+                  className={`w-full h-full object-cover ${
+                    facingMode === "user" ? "-scale-x-100" : ""
+                  } ${isCameraActive ? "opacity-100" : "opacity-0"}`}
                 />
 
-                {/* กรอบช่วยจัดตำแหน่งหน้าและไซต์งาน */}
-                <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
-                  <div className="w-44 h-56 sm:w-52 sm:h-64 rounded-full border-2 border-dashed border-emerald-400/70 shadow-lg shadow-black/40 flex items-center justify-center">
-                    <span className="text-[11px] text-white/90 bg-black/60 px-3 py-1 rounded-full backdrop-blur-sm font-semibold text-center">
-                      หันหน้า & ฉากหลังไซต์งาน
-                    </span>
+                {/* เมื่อกล้องยังไม่ทำงานหรือพบปัญหา ให้แสดงหน้าช่วยเหลือ */}
+                {!isCameraActive && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-white/80 space-y-3 bg-slate-950/90 z-10">
+                    <Camera className="w-12 h-12 text-emerald-400/80 animate-pulse" />
+                    <div className="text-xs max-w-xs space-y-1">
+                      {cameraError ? (
+                        <>
+                          <div className="text-rose-400 font-semibold">{cameraError}</div>
+                          <div className="text-white/60 text-[11px]">
+                            กดปุ่มด้านล่างเพื่อเปิดแอปกล้องของมือถือถ่ายรูปได้ทันที
+                          </div>
+                        </>
+                      ) : (
+                        <div>กำลังเชื่อมต่อกล้องถ่ายภาพ...</div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => nativeCameraInputRef.current?.click()}
+                      className="btn-primary text-xs py-2.5 px-4 inline-flex items-center gap-2 shadow-lg shadow-emerald-500/20"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>📸 เปิดกล้องมือถือถ่ายภาพ</span>
+                    </button>
                   </div>
-                </div>
+                )}
+
+                {/* กรอบช่วยจัดตำแหน่งหน้าและไซต์งาน (เมื่อกล้องเปิดอยู่) */}
+                {isCameraActive && (
+                  <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-4">
+                    <div className="w-44 h-56 sm:w-52 sm:h-64 rounded-full border-2 border-dashed border-emerald-400/80 shadow-lg shadow-black/40 flex items-center justify-center">
+                      <span className="text-[11px] text-white/90 bg-black/60 px-3 py-1 rounded-full backdrop-blur-sm font-semibold text-center">
+                        หันหน้า & ฉากหลังไซต์งาน
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* ปุ่มสลับกล้องหน้า/หลัง */}
-                <button
-                  type="button"
-                  onClick={toggleFacingMode}
-                  title="สลับกล้องหน้า/กล้องหลัง"
-                  className="absolute top-3 right-3 p-2 rounded-xl bg-black/50 hover:bg-black/70 backdrop-blur-md border border-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-md"
-                >
-                  <SwitchCamera className="w-4 h-4 text-emerald-400" />
-                  <span className="text-[11px]">{facingMode === "user" ? "กล้องหน้า" : "กล้องหลัง"}</span>
-                </button>
-              </div>
-            ) : (
-              // หน้าต่างเมื่อกล้องยังไม่เปิด หรือเปิดไม่ได้
-              <div className="p-6 text-center text-white/70 space-y-3">
-                <Camera className="w-12 h-12 text-white/30 mx-auto" />
-                <p className="text-xs max-w-xs mx-auto">
-                  {cameraError || "กำลังเตรียมกล้องถ่ายภาพ..."}
-                </p>
-                <div className="pt-2">
+                {isCameraActive && (
                   <button
                     type="button"
-                    onClick={() => nativeInputRef.current?.click()}
-                    className="btn-primary text-xs py-2 px-4 inline-flex items-center gap-2"
+                    onClick={toggleFacingMode}
+                    title="สลับกล้องหน้า/กล้องหลัง"
+                    className="absolute top-3 right-3 p-2 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-md z-20"
                   >
-                    <Upload className="w-4 h-4" />
-                    <span>เปิดกล้องมือถือเพื่อถ่ายรูป</span>
+                    <SwitchCamera className="w-4 h-4 text-emerald-400" />
+                    <span className="text-[11px]">{facingMode === "user" ? "กล้องหน้า" : "กล้องหลัง"}</span>
                   </button>
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -541,15 +591,27 @@ export default function SiteSelfieModal({
             </>
           ) : (
             <>
-              <button
-                type="button"
-                onClick={() => nativeInputRef.current?.click()}
-                className="px-3.5 py-2.5 rounded-xl border border-line hover:bg-card text-ink text-xs font-semibold transition-colors flex items-center gap-1.5"
-                title="ใช้กล้องถ่ายรูปของมือถือโดยตรง"
-              >
-                <Camera className="w-4 h-4 text-emerald-600" />
-                <span>ใช้กล้องมือถือ</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => nativeCameraInputRef.current?.click()}
+                  className="px-3 py-2.5 rounded-xl border border-line hover:bg-card text-ink text-xs font-semibold transition-colors flex items-center gap-1.5"
+                  title="เปิดแอปกล้องของโทรศัพท์โดยตรง"
+                >
+                  <Camera className="w-4 h-4 text-emerald-600" />
+                  <span className="hidden sm:inline">กล้องมือถือ</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => galleryInputRef.current?.click()}
+                  className="px-3 py-2.5 rounded-xl border border-line hover:bg-card text-ink text-xs font-semibold transition-colors flex items-center gap-1.5"
+                  title="เลือกรูปจากอัลบั้ม"
+                >
+                  <ImageIcon className="w-4 h-4 text-sky-600" />
+                  <span className="hidden sm:inline">อัลบั้ม</span>
+                </button>
+              </div>
 
               <button
                 type="button"
