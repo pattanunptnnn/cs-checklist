@@ -85,6 +85,8 @@ export interface CheckInData {
   verified: boolean;      // เช็คอินสำเร็จหรือไม่
   selfiePhoto?: string;   // รูป Selfie ยืนยันตัวตนคู่กับหน้าไซต์งานจริง (บังคับ)
   selfieTimestamp?: string; // เวลาที่ถ่าย Selfie
+  proofQrDataUrl?: string; // Digital Proof QR Code ที่สร้างอัตโนมัติจากพิกัด Lat/Long สด
+  method?: "gps_proof" | "qr_scan" | "simulation"; // วิธีการเช็คอิน
 }
 
 // ใบตรวจรับ 1 ใบ
