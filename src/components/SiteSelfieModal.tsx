@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   SwitchCamera,
   Upload,
-  Image as ImageIcon,
+  Lock,
 } from "lucide-react";
 
 interface SiteSelfieModalProps {
@@ -47,7 +47,6 @@ export default function SiteSelfieModal({
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
-  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   // หยุดกล้องและคืนทรัพยากร
   const stopCamera = useCallback(() => {
@@ -195,13 +194,14 @@ export default function SiteSelfieModal({
       second: "2-digit",
     });
 
-    const line1 = `BIG-C SITE VERIFICATION · SELFIE`;
+    const line1 = `BIG-C SITE VERIFICATION · SELFIE (LIVE)`;
     const line2 = `👤 ผู้ตรวจ (PM): ${pmName || "วิศวกรผู้ตรวจ Big-C"}`;
     const line3 = `📍 ไซต์งาน: ${storeName || "สาขาหน้างาน"}${storeCode ? ` (${storeCode})` : ""}`;
     const line4 = `⏰ วันเวลา: ${dateStr} ${timeStr} น.`;
     const line5 = coords?.lat && coords?.lng
       ? `🛰️ พิกัด GPS: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)} ${coords.accuracy ? `(±${coords.accuracy}ม.)` : ""}`
       : "";
+    const line6 = `🔒 ถ่ายสดจากกล้องหน้างานจริง (LIVE CAPTURE)`;
 
     ctx.font = `bold ${fontSizeTitle}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
     const w1 = ctx.measureText(line1).width;
@@ -210,17 +210,18 @@ export default function SiteSelfieModal({
     const w3 = ctx.measureText(line3).width;
     const w4 = ctx.measureText(line4).width;
     const w5 = line5 ? ctx.measureText(line5).width : 0;
-    const maxTextWidth = Math.max(w1, w2, w3, w4, w5);
+    const w6 = ctx.measureText(line6).width;
+    const maxTextWidth = Math.max(w1, w2, w3, w4, w5, w6);
 
     const boxWidth = maxTextWidth + padX * 2 + Math.round(16 * scale);
-    const linesCount = line5 ? 5 : 4;
+    const linesCount = line5 ? 6 : 5;
     const boxHeight = padY * 2 + (linesCount - 1) * lineGap + fontSizeTitle;
     const margin = Math.round(20 * scale);
     const boxX = margin;
     const boxY = targetH - boxHeight - margin;
 
     ctx.save();
-    ctx.fillStyle = "rgba(7, 23, 43, 0.84)";
+    ctx.fillStyle = "rgba(7, 23, 43, 0.88)";
     ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
     ctx.lineWidth = Math.max(1, Math.round(1.5 * scale));
 
@@ -256,6 +257,11 @@ export default function SiteSelfieModal({
       ctx.font = `500 ${fontSizeBody}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
       ctx.fillText(line5, boxX + padX, currentY);
     }
+
+    currentY += lineGap;
+    ctx.fillStyle = "#fbbf24";
+    ctx.font = `600 ${fontSizeBody - 1}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    ctx.fillText(line6, boxX + padX, currentY);
 
     ctx.restore();
 
@@ -319,7 +325,6 @@ export default function SiteSelfieModal({
     } finally {
       setIsProcessing(false);
       if (nativeCameraInputRef.current) nativeCameraInputRef.current.value = "";
-      if (galleryInputRef.current) galleryInputRef.current.value = "";
     }
   };
 
@@ -389,21 +394,12 @@ export default function SiteSelfieModal({
       className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md grid place-items-center p-3 sm:p-4 animate-in fade-in duration-150 no-print"
     >
       <div className="card max-w-lg w-full bg-card shadow-2xl overflow-hidden flex flex-col max-h-[95vh] border-line">
-        {/* Input 1: ถ่ายด้วยแอปกล้องมือถือโดยตรง (Native OS Camera) */}
+        {/* Input สำหรับเปิดแอปกล้องหน้ามือถือโดยตรงเพื่อถ่ายสด (บังคับ capture="user") */}
         <input
           ref={nativeCameraInputRef}
           type="file"
           accept="image/*"
           capture="user"
-          className="hidden"
-          onChange={handleNativeFile}
-        />
-
-        {/* Input 2: เลือกรูปจากอัลบั้ม (Gallery Fallback) */}
-        <input
-          ref={galleryInputRef}
-          type="file"
-          accept="image/*"
           className="hidden"
           onChange={handleNativeFile}
         />
@@ -417,8 +413,9 @@ export default function SiteSelfieModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-display font-bold text-base">ถ่ายภาพ Selfie คู่หน้าไซต์งาน</h3>
-                <span className="chip bg-white/25 text-white border border-white/30 text-[10px] font-bold">
-                  บังคับ (Mandatory)
+                <span className="chip bg-rose-500/30 text-white border border-rose-300/40 text-[10px] font-bold flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-rose-300" />
+                  <span>ถ่ายสดเท่านั้น (ห้ามใช้อัลบั้ม)</span>
                 </span>
               </div>
               <p className="text-[11px] text-white/85">
@@ -536,7 +533,10 @@ export default function SiteSelfieModal({
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
                 <span>ข้อมูลที่จะฝังลงบนภาพอัตโนมัติ:</span>
               </span>
-              <span className="text-[10.5px] text-emerald-600 font-semibold">ระบบป้องกันการปลอมแปลง</span>
+              <span className="text-[10.5px] text-emerald-600 font-semibold flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                <span>ถ่ายสดเท่านั้น (ปิดการเลือกอัลบั้ม)</span>
+              </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-ink2 text-[11px] pt-1">
               <div>• <strong>วิศวกร (PM):</strong> {pmName || "วิศวกรผู้ตรวจ Big-C"}</div>
@@ -591,27 +591,15 @@ export default function SiteSelfieModal({
             </>
           ) : (
             <>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => nativeCameraInputRef.current?.click()}
-                  className="px-3 py-2.5 rounded-xl border border-line hover:bg-card text-ink text-xs font-semibold transition-colors flex items-center gap-1.5"
-                  title="เปิดแอปกล้องของโทรศัพท์โดยตรง"
-                >
-                  <Camera className="w-4 h-4 text-emerald-600" />
-                  <span className="hidden sm:inline">กล้องมือถือ</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => galleryInputRef.current?.click()}
-                  className="px-3 py-2.5 rounded-xl border border-line hover:bg-card text-ink text-xs font-semibold transition-colors flex items-center gap-1.5"
-                  title="เลือกรูปจากอัลบั้ม"
-                >
-                  <ImageIcon className="w-4 h-4 text-sky-600" />
-                  <span className="hidden sm:inline">อัลบั้ม</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => nativeCameraInputRef.current?.click()}
+                className="px-3.5 py-2.5 rounded-xl border border-line hover:bg-card text-ink text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0"
+                title="เปิดแอปกล้องหน้าของโทรศัพท์โดยตรงเพื่อถ่ายสด"
+              >
+                <Camera className="w-4 h-4 text-emerald-600" />
+                <span>เปิดกล้องมือถือถ่ายสด</span>
+              </button>
 
               <button
                 type="button"
