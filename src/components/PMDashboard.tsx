@@ -26,12 +26,14 @@ import {
   Calendar,
   Layers,
   ArrowLeft,
-  RefreshCw,
   Wrench,
   Camera,
   X,
+  BarChart3,
+  RefreshCw,
 } from "lucide-react";
 import UserNav from "./UserNav";
+import { BIGC_PMS } from "@/lib/auth";
 
 const TOTAL = totalItems();
 
@@ -112,6 +114,7 @@ export default function PMDashboard() {
   const [punctFilter, setPunctFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [previewSelfie, setPreviewSelfie] = useState<string | null>(null);
+  const [chartMetric, setChartMetric] = useState<"sites" | "ontime" | "score" | "defects">("sites");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -138,7 +141,13 @@ export default function PMDashboard() {
 
     return records.map((r) => {
       const p = r.project || {};
-      const pmName = (p.pm || r.checkIn?.inspectorName || "ไม่ระบุชื่อ PM").trim();
+      const rawPmName = (p.pm || r.checkIn?.inspectorName || "ไม่ระบุชื่อ PM").trim();
+      const pmMatch = BIGC_PMS.find((bp) => {
+        const clean = rawPmName.replace(/^K\.\s*/i, "").replace(/\s*\([^)]*\)$/, "").trim().toLowerCase();
+        const bpClean = bp.name.replace(/^K\.\s*/i, "").trim().toLowerCase();
+        return clean === bpClean || clean.includes(bpClean) || bpClean.includes(clean);
+      });
+      const pmName = pmMatch ? pmMatch.name : rawPmName;
       const scheduledDate = p.inspDate || "";
       const checkInTimestamp = r.checkIn?.timestamp || null;
       const verified = Boolean(r.checkInVerified && r.checkIn?.verified);
@@ -173,9 +182,14 @@ export default function PMDashboard() {
     });
   }, [records]);
 
-  // รวมสถิติ Performance แยกรายบุคคล PM
+  // รวมสถิติ Performance แยกรายบุคคล PM (รวม PM ทั้ง 7 ท่านทางการเสมอ)
   const pmSummaries = useMemo<PMPerformance[]>(() => {
     const map = new Map<string, PMSiteVisit[]>();
+
+    // เริ่มต้นใส่ PM ทางการทั้ง 7 ท่าน เพื่อให้ปรากฏบนกราฟแท่งและสรุปเสมอ
+    for (const p of BIGC_PMS) {
+      map.set(p.name, []);
+    }
 
     for (const v of siteVisits) {
       const list = map.get(v.pmName) || [];
@@ -186,6 +200,9 @@ export default function PMDashboard() {
     const list: PMPerformance[] = [];
 
     map.forEach((visits, pmName) => {
+      const pmInfo = BIGC_PMS.find((p) => p.name === pmName);
+      const zone = pmInfo?.zone;
+
       const totalSites = visits.length;
       const verifiedSites = visits.filter((v) => v.verified).length;
       const onTimeSites = visits.filter((v) => v.punctuality === "on_time").length;
@@ -203,17 +220,21 @@ export default function PMDashboard() {
       const completionRate = maxPossibleItems > 0 ? Math.round((totalFilled / maxPossibleItems) * 100) : 0;
 
       // คำนวณคะแนนประสิทธิภาพ Performance Score (0 - 100)
-      // 35% On-Time + 35% Verified on-site + 20% Completion + 10% Defect diligence
-      let score = Math.round(onTimeRate * 0.35 + verificationRate * 0.35 + completionRate * 0.2 + (totalFailed > 0 ? 10 : 5));
-      score = Math.min(100, Math.max(0, score));
+      let score = 0;
+      if (totalSites > 0) {
+        score = Math.round(onTimeRate * 0.35 + verificationRate * 0.35 + completionRate * 0.2 + (totalFailed > 0 ? 10 : 5));
+        score = Math.min(100, Math.max(0, score));
+      }
 
       let tier: PMPerformance["tier"] = "มาตรฐาน";
-      if (score >= 88) tier = "ยอดเยี่ยม";
+      if (totalSites === 0) tier = "มาตรฐาน";
+      else if (score >= 88) tier = "ยอดเยี่ยม";
       else if (score >= 72) tier = "ดีมาก";
       else if (score < 50) tier = "ต้องปรับปรุง";
 
       list.push({
         pmName,
+        zone,
         totalSites,
         verifiedSites,
         onTimeSites,
@@ -231,9 +252,23 @@ export default function PMDashboard() {
       });
     });
 
-    // เรียงลำดับจากคะแนนสูงสุด
-    return list.sort((a, b) => b.performanceScore - a.performanceScore);
+    // เรียงลำดับ: PM ที่มีไซต์งานมากกว่า หรือคะแนนมากกว่าขึ้นก่อน
+    return list.sort((a, b) => {
+      if (b.totalSites !== a.totalSites) return b.totalSites - a.totalSites;
+      return b.performanceScore - a.performanceScore;
+    });
   }, [siteVisits]);
+
+  // สเกลสูงสุดสำหรับกราฟแท่ง
+  const maxSites = useMemo(() => {
+    const max = Math.max(...pmSummaries.map((p) => p.totalSites), 0);
+    return Math.max(5, max);
+  }, [pmSummaries]);
+
+  const maxDefects = useMemo(() => {
+    const max = Math.max(...pmSummaries.map((p) => p.totalFailed), 0);
+    return Math.max(10, max);
+  }, [pmSummaries]);
 
   // สถิติภาพรวมทั้งระบบ (Global KPIs)
   const globalKpis = useMemo(() => {
@@ -427,6 +462,236 @@ export default function PMDashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-7 space-y-7">
+        {/* ────────── กราฟแท่งสถิติเปรียบเทียบ PM รายบุคคล (Interactive Bar Chart) ────────── */}
+        <section className="card p-4 sm:p-5 bg-card border-line shadow-sm overflow-hidden">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 pb-4 border-b border-line/80">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-brand to-[#0e3b68] text-white grid place-items-center shadow-sm">
+                  <BarChart3 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="font-display font-bold text-base sm:text-lg text-ink">
+                    กราฟแท่งสถิติเปรียบเทียบวิศวกรผู้ตรวจ (PM Comparison Chart)
+                  </h2>
+                  <p className="text-xs text-ink3">
+                    คลิกที่แท่งกราฟของ PM แต่ละท่านเพื่อกรองดูรายการตรวจหน้างานทันที
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ปุ่มสลับ 4 มิติสถิติ */}
+            <div className="flex items-center gap-1 p-1 bg-sunken rounded-xl border border-line overflow-x-auto scrollbar-none self-start md:self-auto">
+              {[
+                { id: "sites", label: "จำนวนไซต์ตรวจ", icon: "🏢" },
+                { id: "ontime", label: "% ความตรงต่อเวลา", icon: "⏱️" },
+                { id: "score", label: "คะแนน Performance", icon: "🏆" },
+                { id: "defects", label: "Defect ที่ตรวจพบ", icon: "⚠️" },
+              ].map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setChartMetric(m.id as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                    chartMetric === m.id
+                      ? "bg-brand text-white shadow-sm"
+                      : "text-ink2 hover:text-ink hover:bg-card/70"
+                  }`}
+                >
+                  <span>{m.icon}</span>
+                  <span>{m.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Legend คำอธิบายสี */}
+          <div className="flex items-center justify-between gap-2 pt-3 pb-1 text-xs flex-wrap">
+            <div className="flex items-center gap-3 text-ink2 text-[11.5px] flex-wrap">
+              {chartMetric === "sites" ? (
+                <>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-emerald-500 shadow-xs" />
+                    <span>ตรงเวลา (On-Time)</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-amber-500 shadow-xs" />
+                    <span>เข้าตรวจสาย (Late)</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-slate-400 shadow-xs" />
+                    <span>ยังไม่เช็คอิน GPS</span>
+                  </span>
+                </>
+              ) : chartMetric === "ontime" ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-gradient-to-t from-teal-600 to-emerald-400 shadow-xs" />
+                  <span>เปอร์เซ็นต์ความตรงต่อเวลานัดหมาย (0 - 100%)</span>
+                </span>
+              ) : chartMetric === "score" ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-gradient-to-t from-amber-600 via-brand to-sky-400 shadow-xs" />
+                  <span>คะแนนประเมินรวมประสิทธิภาพวิศวกร (0 - 100 คะแนน)</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded bg-gradient-to-t from-rose-600 to-amber-500 shadow-xs" />
+                  <span>จำนวนข้อบกพร่อง Defect / NCR ที่ตรวจพบ (จุด)</span>
+                </span>
+              )}
+            </div>
+
+            {selectedPm !== "all" && (
+              <button
+                type="button"
+                onClick={() => setSelectedPm("all")}
+                className="text-[11px] font-semibold text-brand hover:underline flex items-center gap-1"
+              >
+                <span>รีเซ็ตแสดง PM ทุกท่าน</span>
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {/* ตัวกราฟแท่ง (Bar Chart Visual Area) */}
+          <div className="mt-3">
+            <div className="overflow-x-auto pb-4 scrollbar-thin">
+              <div className="min-w-[620px] h-64 relative flex items-end justify-between gap-3 px-4 pt-6 pb-10 border-b border-line/80">
+                {/* เส้นกริดแนวนอน (Horizontal Grid Lines & Scale) */}
+                <div className="absolute inset-x-0 top-6 bottom-10 flex flex-col justify-between pointer-events-none opacity-40">
+                  <div className="border-b border-dashed border-line text-[9.5px] text-ink3 pl-1">
+                    {chartMetric === "sites" ? `${maxSites} ไซต์` : chartMetric === "ontime" || chartMetric === "score" ? "100" : `${maxDefects} จุด`}
+                  </div>
+                  <div className="border-b border-dashed border-line text-[9.5px] text-ink3 pl-1">
+                    {chartMetric === "sites" ? `${Math.round(maxSites * 0.75)} ไซต์` : chartMetric === "ontime" || chartMetric === "score" ? "75" : `${Math.round(maxDefects * 0.75)}`}
+                  </div>
+                  <div className="border-b border-dashed border-line text-[9.5px] text-ink3 pl-1">
+                    {chartMetric === "sites" ? `${Math.round(maxSites * 0.5)} ไซต์` : chartMetric === "ontime" || chartMetric === "score" ? "50" : `${Math.round(maxDefects * 0.5)}`}
+                  </div>
+                  <div className="border-b border-dashed border-line text-[9.5px] text-ink3 pl-1">
+                    {chartMetric === "sites" ? `${Math.round(maxSites * 0.25)} ไซต์` : chartMetric === "ontime" || chartMetric === "score" ? "25" : `${Math.round(maxDefects * 0.25)}`}
+                  </div>
+                  <div className="text-[9.5px] text-ink3 pl-1">0</div>
+                </div>
+
+                {/* แท่งกราฟของ PM แต่ละท่าน */}
+                {pmSummaries.map((pm) => {
+                  const isSelected = selectedPm === pm.pmName;
+
+                  // คำนวณความสูงของแท่งกราฟ (%)
+                  let barHeightPercent = 0;
+                  let displayValue = "";
+
+                  if (chartMetric === "sites") {
+                    barHeightPercent = pm.totalSites > 0 ? Math.max(6, Math.round((pm.totalSites / maxSites) * 100)) : 4;
+                    displayValue = `${pm.totalSites} ไซต์`;
+                  } else if (chartMetric === "ontime") {
+                    barHeightPercent = pm.totalSites > 0 ? Math.max(6, pm.onTimeRate) : 4;
+                    displayValue = pm.totalSites > 0 ? `${pm.onTimeRate}%` : "0%";
+                  } else if (chartMetric === "score") {
+                    barHeightPercent = pm.totalSites > 0 ? Math.max(6, pm.performanceScore) : 4;
+                    displayValue = pm.totalSites > 0 ? `${pm.performanceScore} คะแนน` : "0";
+                  } else {
+                    barHeightPercent = pm.totalFailed > 0 ? Math.max(6, Math.round((pm.totalFailed / maxDefects) * 100)) : 4;
+                    displayValue = `${pm.totalFailed} จุด`;
+                  }
+
+                  // สัดส่วน Segment ในกรณี sites
+                  const onTimePct = pm.totalSites > 0 ? (pm.onTimeSites / pm.totalSites) * 100 : 0;
+                  const latePct = pm.totalSites > 0 ? (pm.lateSites / pm.totalSites) * 100 : 0;
+                  const missingPct = pm.totalSites > 0 ? (pm.missingSites / pm.totalSites) * 100 : 0;
+
+                  return (
+                    <div
+                      key={pm.pmName}
+                      onClick={() => setSelectedPm(isSelected ? "all" : pm.pmName)}
+                      className={`flex-1 min-w-[70px] max-w-[105px] h-full flex flex-col items-center justify-end group cursor-pointer relative z-10 transition-transform ${
+                        isSelected ? "scale-105" : "hover:-translate-y-1"
+                      }`}
+                      title={`คลิกเพื่อดูงานของ ${pm.pmName} (${pm.zone || "PM"})`}
+                    >
+                      {/* ป้ายแสดงตัวเลขด้านบนแท่งกราฟ */}
+                      <div
+                        className={`text-[10.5px] font-bold px-1.5 py-0.5 rounded-md mb-1.5 transition-all shadow-xs whitespace-nowrap ${
+                          isSelected
+                            ? "bg-brand text-white shadow-sm scale-110"
+                            : "bg-sunken text-ink border border-line/60 group-hover:border-brand/40 group-hover:text-brand"
+                        }`}
+                      >
+                        {displayValue}
+                      </div>
+
+                      {/* ตัวแท่งกราฟ (Bar Column) */}
+                      <div
+                        className={`w-full max-w-[44px] rounded-t-xl overflow-hidden transition-all duration-500 shadow-md ${
+                          isSelected
+                            ? "ring-2 ring-brand ring-offset-2 dark:ring-offset-slate-900"
+                            : "group-hover:brightness-110"
+                        }`}
+                        style={{ height: `${barHeightPercent}%` }}
+                      >
+                        {chartMetric === "sites" ? (
+                          // แท่งแบบ Stacked Segmented
+                          pm.totalSites > 0 ? (
+                            <div className="w-full h-full flex flex-col-reverse">
+                              {onTimePct > 0 && (
+                                <div
+                                  className="w-full bg-emerald-500 transition-all"
+                                  style={{ height: `${onTimePct}%` }}
+                                  title={`ตรงเวลา: ${pm.onTimeSites} ไซต์`}
+                                />
+                              )}
+                              {latePct > 0 && (
+                                <div
+                                  className="w-full bg-amber-500 transition-all"
+                                  style={{ height: `${latePct}%` }}
+                                  title={`เข้าตรวจสาย: ${pm.lateSites} ไซต์`}
+                                />
+                              )}
+                              {missingPct > 0 && (
+                                <div
+                                  className="w-full bg-slate-400 dark:bg-slate-600 transition-all"
+                                  style={{ height: `${missingPct}%` }}
+                                  title={`ยังไม่เช็คอิน GPS: ${pm.missingSites} ไซต์`}
+                                />
+                              )}
+                            </div>
+                          ) : (
+                            <div className="w-full h-full bg-slate-200 dark:bg-slate-800" />
+                          )
+                        ) : chartMetric === "ontime" ? (
+                          <div className="w-full h-full bg-gradient-to-t from-teal-600 to-emerald-400" />
+                        ) : chartMetric === "score" ? (
+                          <div className="w-full h-full bg-gradient-to-t from-amber-600 via-brand to-sky-400" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-t from-rose-600 to-amber-500" />
+                        )}
+                      </div>
+
+                      {/* ชื่อ PM และโซนด้านล่างแกน X */}
+                      <div className="absolute -bottom-9 inset-x-0 text-center flex flex-col items-center">
+                        <span
+                          className={`text-[10.5px] font-bold truncate max-w-full ${
+                            isSelected ? "text-brand underline font-black" : "text-ink group-hover:text-brand"
+                          }`}
+                        >
+                          {pm.pmName}
+                        </span>
+                        {pm.zone && (
+                          <span className="text-[9px] text-ink3 font-semibold truncate leading-tight">
+                            {pm.zone}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ────────── ส่วนที่ 1: ลีดเดอร์บอร์ด & คัดเลือกดู PM แต่ละท่าน ────────── */}
         <section>
           <div className="flex items-center justify-between mb-3.5">
@@ -496,8 +761,13 @@ export default function PMDashboard() {
                         {pm.pmName.slice(0, 1)}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-display font-bold text-sm sm:text-base text-ink truncate">
-                          {pm.pmName}
+                        <div className="font-display font-bold text-sm sm:text-base text-ink truncate flex items-center gap-1.5">
+                          <span>{pm.pmName}</span>
+                          {pm.zone && (
+                            <span className="chip bg-sunken text-brand text-[9.5px] font-bold py-0.2">
+                              {pm.zone}
+                            </span>
+                          )}
                         </div>
                         <span className={`chip border text-[10px] font-bold mt-0.5 ${tierBadge}`}>
                           ★ ระดับ {pm.tier} ({pm.performanceScore} คะแนน)

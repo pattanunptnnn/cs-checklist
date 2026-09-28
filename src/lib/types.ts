@@ -147,6 +147,7 @@ export interface PMSiteVisit {
 // สรุปสถิติ Performance ของ PM แต่ละคน
 export interface PMPerformance {
   pmName: string;
+  zone?: string;
   totalSites: number;
   verifiedSites: number;
   onTimeSites: number;
