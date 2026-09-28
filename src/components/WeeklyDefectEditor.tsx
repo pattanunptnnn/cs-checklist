@@ -371,7 +371,7 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
 
         {/* ────────── 3. แถบตัวกรองสถานะ & หมวดงาน ────────── */}
         <div className="flex items-center justify-between gap-2 flex-wrap text-xs bg-card p-3 rounded-2xl border border-line">
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+          <div className="flex flex-wrap items-center gap-1.5 py-0.5">
             <span className="text-ink3 font-semibold shrink-0">สถานะ:</span>
             {[
               { id: "all", label: "ทั้งหมด" },

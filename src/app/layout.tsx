@@ -22,6 +22,9 @@ import { AuthProvider } from "@/components/AuthProvider";
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="th">
+      <head>
+        <link rel="stylesheet" href="https://linux.thai.net/webfonts/tlwg-webfonts.css" type="text/css" />
+      </head>
       <body>
         <AuthProvider>{children}</AuthProvider>
       </body>

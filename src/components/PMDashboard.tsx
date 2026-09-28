@@ -481,8 +481,8 @@ export default function PMDashboard() {
               </div>
             </div>
 
-            {/* ปุ่มสลับ 4 มิติสถิติ */}
-            <div className="flex items-center gap-1 p-1 bg-sunken rounded-xl border border-line overflow-x-auto scrollbar-none self-start md:self-auto">
+            {/* ปุ่มสลับ 4 มิติสถิติ (แสดงครบโดยไม่ต้องเลื่อนแถบ) */}
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 p-1 bg-sunken rounded-xl border border-line w-full md:w-auto">
               {[
                 { id: "sites", label: "จำนวนไซต์ตรวจ", icon: "🏢" },
                 { id: "ontime", label: "% ความตรงต่อเวลา", icon: "⏱️" },
@@ -493,14 +493,14 @@ export default function PMDashboard() {
                   key={m.id}
                   type="button"
                   onClick={() => setChartMetric(m.id as any)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-center ${
                     chartMetric === m.id
                       ? "bg-brand text-white shadow-sm"
                       : "text-ink2 hover:text-ink hover:bg-card/70"
                   }`}
                 >
-                  <span>{m.icon}</span>
-                  <span>{m.label}</span>
+                  <span className="shrink-0">{m.icon}</span>
+                  <span className="truncate">{m.label}</span>
                 </button>
               ))}
             </div>
@@ -554,28 +554,28 @@ export default function PMDashboard() {
             )}
           </div>
 
-          {/* ตัวกราฟแท่ง (Bar Chart Visual Area) */}
-          <div className="mt-3">
-            <div className="overflow-x-auto pb-4 scrollbar-thin">
-              <div className="min-w-[620px] h-64 relative flex items-end justify-between gap-3 px-4 pt-6 pb-10 border-b border-line/80">
+          {/* ตัวกราฟแท่ง (Bar Chart Visual Area - ปรับให้พอดีหน้าจอ 100% ไม่ต้องเลื่อนแถบ) */}
+          <div className="mt-3 w-full">
+            <div className="w-full">
+              <div className="w-full h-64 sm:h-72 relative flex items-end justify-between gap-1 sm:gap-2 px-1 sm:px-4 pt-6 pb-12 border-b border-line/80">
                 {/* เส้นกริดแนวนอน (Horizontal Grid Lines & Scale) */}
-                <div className="absolute inset-x-0 top-6 bottom-10 flex flex-col justify-between pointer-events-none opacity-40">
-                  <div className="border-b border-dashed border-line text-[9.5px] text-ink3 pl-1">
+                <div className="absolute inset-x-0 top-6 bottom-12 flex flex-col justify-between pointer-events-none opacity-40">
+                  <div className="border-b border-dashed border-line text-[9px] sm:text-[9.5px] text-ink3 pl-1">
                     {chartMetric === "sites" ? `${maxSites} ไซต์` : chartMetric === "ontime" || chartMetric === "score" ? "100" : `${maxDefects} จุด`}
                   </div>
-                  <div className="border-b border-dashed border-line text-[9.5px] text-ink3 pl-1">
+                  <div className="border-b border-dashed border-line text-[9px] sm:text-[9.5px] text-ink3 pl-1">
                     {chartMetric === "sites" ? `${Math.round(maxSites * 0.75)} ไซต์` : chartMetric === "ontime" || chartMetric === "score" ? "75" : `${Math.round(maxDefects * 0.75)}`}
                   </div>
-                  <div className="border-b border-dashed border-line text-[9.5px] text-ink3 pl-1">
+                  <div className="border-b border-dashed border-line text-[9px] sm:text-[9.5px] text-ink3 pl-1">
                     {chartMetric === "sites" ? `${Math.round(maxSites * 0.5)} ไซต์` : chartMetric === "ontime" || chartMetric === "score" ? "50" : `${Math.round(maxDefects * 0.5)}`}
                   </div>
-                  <div className="border-b border-dashed border-line text-[9.5px] text-ink3 pl-1">
+                  <div className="border-b border-dashed border-line text-[9px] sm:text-[9.5px] text-ink3 pl-1">
                     {chartMetric === "sites" ? `${Math.round(maxSites * 0.25)} ไซต์` : chartMetric === "ontime" || chartMetric === "score" ? "25" : `${Math.round(maxDefects * 0.25)}`}
                   </div>
-                  <div className="text-[9.5px] text-ink3 pl-1">0</div>
+                  <div className="text-[9px] sm:text-[9.5px] text-ink3 pl-1">0</div>
                 </div>
 
-                {/* แท่งกราฟของ PM แต่ละท่าน */}
+                {/* แท่งกราฟของ PM แต่ละท่าน (ยืดหยุ่น พอดีความกว้างหน้าจอ ไม่ต้องเลื่อนแถบ) */}
                 {pmSummaries.map((pm) => {
                   const isSelected = selectedPm === pm.pmName;
 
@@ -606,14 +606,14 @@ export default function PMDashboard() {
                     <div
                       key={pm.pmName}
                       onClick={() => setSelectedPm(isSelected ? "all" : pm.pmName)}
-                      className={`flex-1 min-w-[70px] max-w-[105px] h-full flex flex-col items-center justify-end group cursor-pointer relative z-10 transition-transform ${
+                      className={`flex-1 min-w-0 max-w-[85px] h-full flex flex-col items-center justify-end group cursor-pointer relative z-10 transition-transform ${
                         isSelected ? "scale-105" : "hover:-translate-y-1"
                       }`}
                       title={`คลิกเพื่อดูงานของ ${pm.pmName} (${pm.zone || "PM"})`}
                     >
                       {/* ป้ายแสดงตัวเลขด้านบนแท่งกราฟ */}
                       <div
-                        className={`text-[10.5px] font-bold px-1.5 py-0.5 rounded-md mb-1.5 transition-all shadow-xs whitespace-nowrap ${
+                        className={`text-[8.5px] sm:text-[10.5px] font-bold px-1 sm:px-1.5 py-0.5 rounded-md mb-1.5 transition-all shadow-xs text-center max-w-full truncate ${
                           isSelected
                             ? "bg-brand text-white shadow-sm scale-110"
                             : "bg-sunken text-ink border border-line/60 group-hover:border-brand/40 group-hover:text-brand"
@@ -624,7 +624,7 @@ export default function PMDashboard() {
 
                       {/* ตัวแท่งกราฟ (Bar Column) */}
                       <div
-                        className={`w-full max-w-[44px] rounded-t-xl overflow-hidden transition-all duration-500 shadow-md ${
+                        className={`w-full max-w-[28px] sm:max-w-[42px] rounded-t-lg sm:rounded-t-xl overflow-hidden transition-all duration-500 shadow-md ${
                           isSelected
                             ? "ring-2 ring-brand ring-offset-2 dark:ring-offset-slate-900"
                             : "group-hover:brightness-110"
@@ -670,16 +670,20 @@ export default function PMDashboard() {
                       </div>
 
                       {/* ชื่อ PM และโซนด้านล่างแกน X */}
-                      <div className="absolute -bottom-9 inset-x-0 text-center flex flex-col items-center">
+                      <div className="absolute -bottom-11 inset-x-0 text-center flex flex-col items-center px-0.5 pointer-events-none">
                         <span
-                          className={`text-[10.5px] font-bold truncate max-w-full ${
+                          className={`text-[9px] sm:text-[11px] font-bold truncate w-full ${
                             isSelected ? "text-brand underline font-black" : "text-ink group-hover:text-brand"
                           }`}
+                          title={pm.pmName}
                         >
                           {pm.pmName}
                         </span>
                         {pm.zone && (
-                          <span className="text-[9px] text-ink3 font-semibold truncate leading-tight">
+                          <span
+                            className="text-[7.5px] sm:text-[9.5px] text-ink3 font-semibold truncate w-full leading-tight"
+                            title={pm.zone}
+                          >
                             {pm.zone}
                           </span>
                         )}
