@@ -10,6 +10,35 @@ export interface RegisteredUser extends AuthUser {
   createdAt?: string;
 }
 
+export interface PMInfo {
+  id: string;
+  name: string;
+  zone: string;
+  email: string;
+  phone?: string;
+}
+
+// รายชื่อ Project Manager (PM) และโซนรับผิดชอบ
+export const BIGC_PMS: PMInfo[] = [
+  { id: "pm-thienchai", name: "Thienchai", zone: "BKK1", email: "thienchai@bigc.co.th" },
+  { id: "pm-chaichana", name: "Chaichana", zone: "BKK2", email: "chaichana@bigc.co.th" },
+  { id: "pm-pongsak", name: "Pongsak", zone: "BKK2", email: "pongsak@bigc.co.th" },
+  { id: "pm-vaigoon", name: "K. Vaigoon", zone: "East & NE2", email: "vaigoon@bigc.co.th" },
+  { id: "pm-tawat", name: "K. Tawat", zone: "North & Central", email: "tawat@bigc.co.th" },
+  { id: "pm-wicharn", name: "K. Wicharn", zone: "Northeast1", email: "wicharn@bigc.co.th" },
+  { id: "pm-chinakorn", name: "K. Chinakorn", zone: "North & Central", email: "chinakorn@bigc.co.th" },
+];
+
+export const PM_USERS: RegisteredUser[] = BIGC_PMS.map((pm) => ({
+  id: pm.id,
+  email: pm.email,
+  password: "pm1234",
+  name: pm.name,
+  role: "pm",
+  title: `Project Manager (${pm.zone})`,
+  phone: pm.phone || "081-xxx-xxxx",
+}));
+
 export const DEMO_USERS: Record<UserRole, AuthUser & { password: string }> = {
   admin: {
     id: "usr-admin-01",
@@ -21,13 +50,13 @@ export const DEMO_USERS: Record<UserRole, AuthUser & { password: string }> = {
     phone: "02-655-0666",
   },
   pm: {
-    id: "usr-pm-01",
-    email: "pm.somchai@bigc.co.th",
+    id: "pm-thienchai",
+    email: "thienchai@bigc.co.th",
     password: "pm1234",
-    name: "สมชาย ใจดี",
+    name: "Thienchai",
     role: "pm",
-    title: "Project Manager (วิศวกรหน้าไซต์)",
-    phone: "081-456-7890",
+    title: "Project Manager (BKK1)",
+    phone: "081-xxx-xxxx",
   },
   supervisor: {
     id: "usr-sup-01",
@@ -40,24 +69,42 @@ export const DEMO_USERS: Record<UserRole, AuthUser & { password: string }> = {
   },
 };
 
+export const INITIAL_USERS: RegisteredUser[] = [
+  DEMO_USERS.admin,
+  DEMO_USERS.supervisor,
+  ...PM_USERS,
+];
+
 const USERS_STORAGE_KEY = "bigc_cs_registered_users";
 
 export function getRegisteredUsers(): RegisteredUser[] {
-  if (typeof window === "undefined") return Object.values(DEMO_USERS);
+  if (typeof window === "undefined") return INITIAL_USERS;
   try {
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
     if (!raw) {
-      const initial = Object.values(DEMO_USERS);
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(initial));
-      return initial;
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
+      return INITIAL_USERS;
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+      // ตรวจสอบว่ามีรายชื่อ PM ครบทั้ง 7 ท่านหรือไม่ ถ้ายังไม่มีให้รวมเข้าด้วยกัน
+      const existingEmails = new Set(parsed.map((u: any) => u.email?.toLowerCase()));
+      let hasNew = false;
+      const merged = [...parsed];
+      for (const pmUser of PM_USERS) {
+        if (!existingEmails.has(pmUser.email.toLowerCase())) {
+          merged.push(pmUser);
+          hasNew = true;
+        }
+      }
+      if (hasNew) {
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
+      }
+      return merged;
     }
-    return Object.values(DEMO_USERS);
+    return INITIAL_USERS;
   } catch {
-    return Object.values(DEMO_USERS);
+    return INITIAL_USERS;
   }
 }
 

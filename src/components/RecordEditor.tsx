@@ -17,6 +17,7 @@ import QRCheckIn from "./QRCheckIn";
 import SiteSelfieModal from "./SiteSelfieModal";
 import UserNav from "./UserNav";
 import { useAuth } from "./AuthProvider";
+import { BIGC_PMS } from "@/lib/auth";
 import {
   ArrowLeft,
   Printer,
@@ -192,10 +193,14 @@ export default function RecordEditor({ id }: { id: string }) {
         if (!res.ok) throw new Error();
         const data = (await res.json()) as InspectionRecord;
         if (alive) {
+          const initialProject = data.project ?? {};
+          if (user?.role === "pm" && !initialProject.pm && user?.name) {
+            initialProject.pm = user.name;
+          }
           setRecord({
             ...data,
             id,
-            project: data.project ?? {},
+            project: initialProject,
             items: data.items ?? {},
             testResults: data.testResults ?? {},
             signatures: data.signatures ?? {},
@@ -715,18 +720,46 @@ export default function RecordEditor({ id }: { id: string }) {
 
           {openProject && (
             <div className="px-4 sm:px-5 pb-5 pt-3 border-t border-line/70 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 bg-card">
-              {checklist.projectFields.map(([key, label]) => (
-                <label key={key} className="block">
-                  <span className="block text-xs font-bold text-ink2 mb-1.5">{label}</span>
-                  <input
-                    id={`project-${key}`}
-                    value={record.project[key] || ""}
-                    onChange={(e) => updateProject(key, e.target.value)}
-                    placeholder={`กรอก ${label.split(" (")[0]}`}
-                    className="field"
-                  />
-                </label>
-              ))}
+              {checklist.projectFields.map(([key, label]) => {
+                if (key === "pm") {
+                  return (
+                    <label key={key} className="block">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-ink2">{label}</span>
+                        <span className="text-[10.5px] text-brand font-semibold">เลือกหรือพิมพ์เอง</span>
+                      </div>
+                      <input
+                        id={`project-${key}`}
+                        list="bigc-pms-datalist"
+                        value={record.project[key] || ""}
+                        onChange={(e) => updateProject(key, e.target.value)}
+                        placeholder="เลือกชื่อ PM หรือระบุเอง..."
+                        className="field"
+                      />
+                      <datalist id="bigc-pms-datalist">
+                        {BIGC_PMS.map((p) => (
+                          <option key={p.id} value={`${p.name} (${p.zone})`}>
+                            {p.name} — โซน {p.zone}
+                          </option>
+                        ))}
+                      </datalist>
+                    </label>
+                  );
+                }
+
+                return (
+                  <label key={key} className="block">
+                    <span className="block text-xs font-bold text-ink2 mb-1.5">{label}</span>
+                    <input
+                      id={`project-${key}`}
+                      value={record.project[key] || ""}
+                      onChange={(e) => updateProject(key, e.target.value)}
+                      placeholder={`กรอก ${label.split(" (")[0]}`}
+                      className="field"
+                    />
+                  </label>
+                );
+              })}
             </div>
           )}
         </section>

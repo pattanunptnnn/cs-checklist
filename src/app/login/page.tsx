@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { getRoleBadgeInfo } from "@/lib/auth";
+import { getRoleBadgeInfo, BIGC_PMS } from "@/lib/auth";
 import type { UserRole } from "@/lib/types";
 import {
   ShieldCheck,
@@ -278,13 +278,55 @@ export default function LoginPage() {
                 </button>
               </div>
 
+              {/* รายชื่อ PM 7 ท่าน สำหรับเข้าสู่ระบบด่วน (Quick PM Selection) */}
+              <div className="mt-5 pt-4 border-t border-line/70">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-brand" />
+                    <span>เข้าสู่ระบบด่วนด้วยบัญชี PM (7 ท่าน):</span>
+                  </span>
+                  <span className="text-[10.5px] text-ink3 font-medium">รหัส: pm1234</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1.5 bg-sunken/80 rounded-xl border border-line">
+                  {BIGC_PMS.map((pm) => {
+                    const isSelected = signInEmail.toLowerCase() === pm.email.toLowerCase();
+                    return (
+                      <button
+                        key={pm.id}
+                        type="button"
+                        onClick={() => {
+                          setSignInEmail(pm.email);
+                          setSignInPassword("pm1234");
+                          setErrorMsg("");
+                        }}
+                        className={`p-2 rounded-lg text-left transition-all border text-xs flex flex-col ${
+                          isSelected
+                            ? "bg-brand/10 border-brand text-brand font-bold shadow-xs"
+                            : "bg-card border-line/60 text-ink hover:border-brand/40 hover:bg-card/80"
+                        }`}
+                      >
+                        <div className="font-bold truncate text-[11.5px] flex items-center justify-between gap-1">
+                          <span>{pm.name}</span>
+                          <span className="text-[9.5px] font-semibold px-1 py-0.2 rounded bg-sunken text-brand shrink-0">
+                            {pm.zone}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-ink3 truncate font-normal mt-0.5">
+                          {pm.email}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* ข้อมูลบัญชีตัวอย่างเริ่มต้นสำหรับทดสอบ */}
-              <div className="mt-6 pt-4 border-t border-line/70 text-xs text-ink3">
-                <div className="font-semibold text-ink2 mb-1.5">ตัวอย่างบัญชีทดสอบในระบบ:</div>
-                <div className="space-y-1 text-[11.5px] tnum">
-                  <div>• <strong>Admin:</strong> admin@bigc.co.th (รหัส: admin1234)</div>
-                  <div>• <strong>PM:</strong> pm.somchai@bigc.co.th (รหัส: pm1234)</div>
-                  <div>• <strong>Supervisor:</strong> supervisor.wichai@bigc.co.th (รหัส: sup1234)</div>
+              <div className="mt-3 pt-3 border-t border-line/60 text-xs text-ink3">
+                <div className="font-semibold text-ink2 mb-1">บัญชี Role อื่นๆ:</div>
+                <div className="space-y-0.5 text-[11px] tnum flex flex-wrap gap-x-4">
+                  <div>• <strong>Admin:</strong> admin@bigc.co.th (admin1234)</div>
+                  <div>• <strong>Supervisor:</strong> supervisor.wichai@bigc.co.th (sup1234)</div>
                 </div>
               </div>
             </form>
