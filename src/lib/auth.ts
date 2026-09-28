@@ -20,9 +20,9 @@ export interface PMInfo {
 
 // รายชื่อ Project Manager (PM) และโซนรับผิดชอบ
 export const BIGC_PMS: PMInfo[] = [
-  { id: "pm-thienchai", name: "Thienchai", zone: "BKK1", email: "thienchai@bigc.co.th" },
-  { id: "pm-chaichana", name: "Chaichana", zone: "BKK2", email: "chaichana@bigc.co.th" },
-  { id: "pm-pongsak", name: "Pongsak", zone: "BKK2", email: "pongsak@bigc.co.th" },
+  { id: "pm-thienchai", name: "K. Thienchai", zone: "BKK1", email: "thienchai@bigc.co.th" },
+  { id: "pm-chaichana", name: "K. Chaichana", zone: "BKK2", email: "chaichana@bigc.co.th" },
+  { id: "pm-pongsak", name: "K. Pongsak", zone: "BKK2", email: "pongsak@bigc.co.th" },
   { id: "pm-vaigoon", name: "K. Vaigoon", zone: "East & NE2", email: "vaigoon@bigc.co.th" },
   { id: "pm-tawat", name: "K. Tawat", zone: "North & Central", email: "tawat@bigc.co.th" },
   { id: "pm-wicharn", name: "K. Wicharn", zone: "Northeast1", email: "wicharn@bigc.co.th" },
@@ -53,7 +53,7 @@ export const DEMO_USERS: Record<UserRole, AuthUser & { password: string }> = {
     id: "pm-thienchai",
     email: "thienchai@bigc.co.th",
     password: "pm1234",
-    name: "Thienchai",
+    name: "K. Thienchai",
     role: "pm",
     title: "Project Manager (BKK1)",
     phone: "081-xxx-xxxx",
@@ -87,17 +87,20 @@ export function getRegisteredUsers(): RegisteredUser[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      // ตรวจสอบว่ามีรายชื่อ PM ครบทั้ง 7 ท่านหรือไม่ ถ้ายังไม่มีให้รวมเข้าด้วยกัน
-      const existingEmails = new Set(parsed.map((u: any) => u.email?.toLowerCase()));
-      let hasNew = false;
+      // ตรวจสอบและอัปเดตรายชื่อ PM ทั้ง 7 ท่าน พร้อมคำนำหน้า K.
+      let hasUpdate = false;
       const merged = [...parsed];
       for (const pmUser of PM_USERS) {
-        if (!existingEmails.has(pmUser.email.toLowerCase())) {
+        const foundIdx = merged.findIndex((u: any) => u.email?.toLowerCase() === pmUser.email.toLowerCase());
+        if (foundIdx === -1) {
           merged.push(pmUser);
-          hasNew = true;
+          hasUpdate = true;
+        } else if (merged[foundIdx].name !== pmUser.name) {
+          merged[foundIdx] = { ...merged[foundIdx], name: pmUser.name, title: pmUser.title };
+          hasUpdate = true;
         }
       }
-      if (hasNew) {
+      if (hasUpdate) {
         localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
       }
       return merged;
