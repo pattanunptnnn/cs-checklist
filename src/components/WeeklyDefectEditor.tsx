@@ -13,6 +13,7 @@ import type {
 } from "@/lib/types";
 import QRCheckIn from "./QRCheckIn";
 import PhotoUploader from "./PhotoUploader";
+import { BIGC_PMS } from "@/lib/auth";
 import {
   ArrowLeft,
   Printer,
@@ -272,10 +273,37 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
                 )}
               </div>
 
-              <div className="text-[12px] text-white/75 truncate mt-0.5">
-                ตรวจเมื่อ: {record.inspDate || "-"}
-                {record.pm && ` · PM: ${record.pm}`}
-                {record.contractor && ` · ผู้รับเหมา: ${record.contractor}`}
+              <div className="flex items-center gap-2 text-[12px] text-white/80 flex-wrap mt-1">
+                <span>ตรวจเมื่อ: {record.inspDate || "-"}</span>
+                <span>·</span>
+                <div className="inline-flex items-center gap-1.5 bg-black/30 backdrop-blur-xs px-2 py-0.5 rounded-lg border border-white/20">
+                  <User className="w-3 h-3 text-white/70" />
+                  <span className="text-white/70 font-semibold">PM:</span>
+                  <select
+                    value={
+                      BIGC_PMS.some((p) => `${p.name} (${p.zone})` === record.pm || p.name === record.pm)
+                        ? record.pm
+                        : record.pm || ""
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRecord((prev) => (prev ? { ...prev, pm: val } : prev));
+                      setDirty(true);
+                    }}
+                    className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="" className="text-ink bg-card">-- ยังไม่ระบุ PM --</option>
+                    {BIGC_PMS.map((p) => (
+                      <option key={p.id} value={`${p.name} (${p.zone})`} className="text-ink bg-card">
+                        {p.name} ({p.zone})
+                      </option>
+                    ))}
+                    {record.pm && !BIGC_PMS.some((p) => `${p.name} (${p.zone})` === record.pm || p.name === record.pm) && (
+                      <option value={record.pm} className="text-ink bg-card">{record.pm}</option>
+                    )}
+                  </select>
+                </div>
+                {record.contractor && <span>· ผู้รับเหมา: {record.contractor}</span>}
               </div>
             </div>
 

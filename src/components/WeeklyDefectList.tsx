@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { WeeklyDefectSummary } from "@/lib/types";
 import UserNav from "./UserNav";
+import { BIGC_PMS } from "@/lib/auth";
 import {
   Wrench,
   Plus,
@@ -47,6 +48,7 @@ export default function WeeklyDefectList() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [weekFilter, setWeekFilter] = useState<string>("all");
+  const [pmFilter, setPmFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "has_open" | "all_closed">("all");
 
   // State Modal สร้างรอบตรวจใหม่
@@ -110,6 +112,13 @@ export default function WeeklyDefectList() {
       list = list.filter((r) => r.weekNumber === wNum);
     }
 
+    if (pmFilter !== "all") {
+      list = list.filter((r) => {
+        const pmVal = (r.pm || "").toLowerCase();
+        return pmVal.includes(pmFilter.toLowerCase());
+      });
+    }
+
     if (statusFilter === "has_open") {
       list = list.filter((r) => r.openCount > 0 || r.inProgressCount > 0);
     } else if (statusFilter === "all_closed") {
@@ -126,7 +135,7 @@ export default function WeeklyDefectList() {
     }
 
     return list;
-  }, [rows, weekFilter, statusFilter, searchQuery]);
+  }, [rows, weekFilter, pmFilter, statusFilter, searchQuery]);
 
   // สร้างรอบตรวจใหม่
   async function handleCreate(e: React.FormEvent) {
@@ -352,6 +361,23 @@ export default function WeeklyDefectList() {
                   <option value="4">สัปดาห์ที่ 4</option>
                   <option value="5">สัปดาห์ที่ 5</option>
                   <option value="6">สัปดาห์ที่ 6</option>
+                </select>
+              </div>
+
+              {/* กรอง PM */}
+              <div className="flex items-center gap-1.5 text-xs bg-sunken p-1 rounded-xl border border-line">
+                <span className="text-ink3 px-2 font-medium">PM:</span>
+                <select
+                  value={pmFilter}
+                  onChange={(e) => setPmFilter(e.target.value)}
+                  className="bg-card border border-line rounded-lg px-2.5 py-1 text-xs text-ink font-semibold max-w-[170px]"
+                >
+                  <option value="all">PM ทุกท่าน</option>
+                  {BIGC_PMS.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name} ({p.zone})
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -631,14 +657,44 @@ export default function WeeklyDefectList() {
               </div>
 
               <div>
-                <label className="block font-bold text-ink2 mb-1">วิศวกรผู้ตรวจ (PM)</label>
-                <input
-                  type="text"
-                  value={formPm}
-                  onChange={(e) => setFormPm(e.target.value)}
-                  placeholder="เช่น สมชาย วิศวกรรม"
-                  className="field w-full"
-                />
+                <label className="block font-bold text-ink2 mb-1">
+                  วิศวกรผู้ตรวจ (PM) <span className="text-brand">*</span>
+                </label>
+                <div className="space-y-1.5">
+                  <select
+                    value={
+                      BIGC_PMS.some((p) => `${p.name} (${p.zone})` === formPm || p.name === formPm)
+                        ? formPm
+                        : formPm ? "__custom__" : ""
+                    }
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setFormPm(" ");
+                      } else {
+                        setFormPm(e.target.value);
+                      }
+                    }}
+                    className="field w-full font-semibold"
+                  >
+                    <option value="">-- เลือกวิศวกรผู้ตรวจ (PM) --</option>
+                    {BIGC_PMS.map((p) => (
+                      <option key={p.id} value={`${p.name} (${p.zone})`}>
+                        {p.name} — โซน {p.zone}
+                      </option>
+                    ))}
+                    <option value="__custom__">ระบุชื่ออื่นเอง...</option>
+                  </select>
+                  {(!BIGC_PMS.some((p) => `${p.name} (${p.zone})` === formPm || p.name === formPm) && formPm !== "") && (
+                    <input
+                      type="text"
+                      value={formPm.trim()}
+                      onChange={(e) => setFormPm(e.target.value)}
+                      placeholder="พิมพ์ชื่อวิศวกรผู้ตรวจ..."
+                      className="field w-full text-xs"
+                      autoFocus
+                    />
+                  )}
+                </div>
               </div>
 
               <div>
