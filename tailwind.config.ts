@@ -24,9 +24,9 @@ const config: Config = {
         na: token("na"),
       },
       fontFamily: {
-        sans: ['"TLWGTypewriter"', '"Tlwg Typewriter"', "monospace", "system-ui", "sans-serif"],
-        display: ['"TLWGTypewriter"', '"Tlwg Typewriter"', "monospace", "system-ui", "sans-serif"],
-        mono: ['"TLWGTypewriter"', '"Tlwg Typewriter"', "monospace", "ui-monospace", "SFMono-Regular"],
+        sans: ['"IBM Plex Sans Thai"', "system-ui", "-apple-system", "sans-serif"],
+        display: ['"IBM Plex Sans Thai Condensed"', '"IBM Plex Sans Thai"', "system-ui", "-apple-system", "sans-serif"],
+        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
       },
       borderRadius: {
         xl: "0.75rem",
