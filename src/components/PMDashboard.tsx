@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { totalItems } from "@/lib/checklist";
-import type { RecordSummary, PMSiteVisit, PMPerformance, PunctualityStatus } from "@/lib/types";
+import type { RecordSummary, PMSiteVisit, PMPerformance, PunctualityStatus, WeeklyDefectSummary } from "@/lib/types";
 import {
   Users,
   Building2,
@@ -31,12 +31,24 @@ import {
   X,
   BarChart3,
   RefreshCw,
+  Plus,
 } from "lucide-react";
 import UserNav from "./UserNav";
-import { BIGC_PMS } from "@/lib/auth";
+import { BIGC_PMS, isRecordOwnedByPm } from "@/lib/auth";
 import { useAuth } from "./AuthProvider";
 
 const TOTAL = totalItems();
+
+// แปลงชื่อ PM ให้ตรงกับรายชื่อมาตรฐาน Big-C
+function matchPmName(rawPmName?: string): string {
+  if (!rawPmName) return "ไม่ระบุชื่อ PM";
+  const clean = rawPmName.replace(/^K\.\s*/i, "").replace(/\s*\([^)]*\)$/, "").trim().toLowerCase();
+  const found = BIGC_PMS.find((bp) => {
+    const bpClean = bp.name.replace(/^K\.\s*/i, "").trim().toLowerCase();
+    return clean === bpClean || clean.includes(bpClean) || bpClean.includes(clean);
+  });
+  return found ? found.name : rawPmName.trim();
+}
 
 function fmtShortDate(isoOrDate: string | null): string {
   if (!isoOrDate) return "-";
@@ -111,9 +123,12 @@ export default function PMDashboard() {
   const router = useRouter();
   const { user, role } = useAuth();
   const [records, setRecords] = useState<RecordSummary[] | null>(null);
+  const [weeklyDefects, setWeeklyDefects] = useState<WeeklyDefectSummary[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPm, setSelectedPm] = useState<string>("all");
   const [punctFilter, setPunctFilter] = useState<string>("all");
+  const [defectStatusFilter, setDefectStatusFilter] = useState<"all" | "open" | "resolved" | "critical">("all");
+  const [activeView, setActiveView] = useState<"sites" | "defects">("sites");
   const [searchQuery, setSearchQuery] = useState("");
   const [previewSelfie, setPreviewSelfie] = useState<string | null>(null);
   const [chartMetric, setChartMetric] = useState<"sites" | "ontime" | "score" | "defects">("sites");
@@ -137,13 +152,20 @@ export default function PMDashboard() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/records");
-      if (res.ok) {
-        const data: RecordSummary[] = await res.json();
+      const [recRes, defRes] = await Promise.all([
+        fetch("/api/records"),
+        fetch("/api/defects"),
+      ]);
+      if (recRes.ok) {
+        const data: RecordSummary[] = await recRes.json();
         setRecords(data);
       }
+      if (defRes.ok) {
+        const defData: WeeklyDefectSummary[] = await defRes.json();
+        setWeeklyDefects(defData);
+      }
     } catch (err) {
-      console.error("Failed to load records for dashboard:", err);
+      console.error("Failed to load records & defects for dashboard:", err);
     } finally {
       setLoading(false);
     }
@@ -160,12 +182,7 @@ export default function PMDashboard() {
     return records.map((r) => {
       const p = r.project || {};
       const rawPmName = (p.pm || r.checkIn?.inspectorName || "ไม่ระบุชื่อ PM").trim();
-      const pmMatch = BIGC_PMS.find((bp) => {
-        const clean = rawPmName.replace(/^K\.\s*/i, "").replace(/\s*\([^)]*\)$/, "").trim().toLowerCase();
-        const bpClean = bp.name.replace(/^K\.\s*/i, "").trim().toLowerCase();
-        return clean === bpClean || clean.includes(bpClean) || bpClean.includes(clean);
-      });
-      const pmName = pmMatch ? pmMatch.name : rawPmName;
+      const pmName = matchPmName(rawPmName);
       const scheduledDate = p.inspDate || "";
       const checkInTimestamp = r.checkIn?.timestamp || null;
       const verified = Boolean(r.checkInVerified && r.checkIn?.verified);
@@ -234,18 +251,27 @@ export default function PMDashboard() {
       const totalFailed = visits.reduce((acc, v) => acc + v.failCount, 0);
       const totalFilled = visits.reduce((acc, v) => acc + v.filledCount, 0);
 
+      // คำนวณรอบตรวจ Defect รายสัปดาห์ของ PM ท่านนี้
+      const pmDefectRounds = (weeklyDefects || []).filter((w) => matchPmName(w.pm) === pmName);
+      const weeklyDefectsTotal = pmDefectRounds.reduce((acc, w) => acc + (w.totalDefects || 0), 0);
+      const weeklyDefectsOpen = pmDefectRounds.reduce((acc, w) => acc + (w.openCount + w.inProgressCount || 0), 0);
+      const weeklyDefectsResolved = pmDefectRounds.reduce((acc, w) => acc + (w.resolvedCount + w.closedCount || 0), 0);
+      const weeklyDefectsCritical = pmDefectRounds.reduce((acc, w) => acc + (w.criticalCount || 0), 0);
+      const weeklyRoundsCount = pmDefectRounds.length;
+      const totalDefectsAll = totalFailed + weeklyDefectsTotal;
+
       const maxPossibleItems = totalSites * TOTAL;
       const completionRate = maxPossibleItems > 0 ? Math.round((totalFilled / maxPossibleItems) * 100) : 0;
 
       // คำนวณคะแนนประสิทธิภาพ Performance Score (0 - 100)
       let score = 0;
-      if (totalSites > 0) {
-        score = Math.round(onTimeRate * 0.35 + verificationRate * 0.35 + completionRate * 0.2 + (totalFailed > 0 ? 10 : 5));
+      if (totalSites > 0 || weeklyRoundsCount > 0) {
+        score = Math.round(onTimeRate * 0.35 + verificationRate * 0.35 + completionRate * 0.2 + (totalDefectsAll > 0 ? 10 : 5));
         score = Math.min(100, Math.max(0, score));
       }
 
       let tier: PMPerformance["tier"] = "มาตรฐาน";
-      if (totalSites === 0) tier = "มาตรฐาน";
+      if (totalSites === 0 && weeklyRoundsCount === 0) tier = "มาตรฐาน";
       else if (score >= 88) tier = "ยอดเยี่ยม";
       else if (score >= 72) tier = "ดีมาก";
       else if (score < 50) tier = "ต้องปรับปรุง";
@@ -267,15 +293,23 @@ export default function PMDashboard() {
         performanceScore: score,
         tier,
         visits,
+        weeklyDefectsTotal,
+        weeklyDefectsOpen,
+        weeklyDefectsResolved,
+        weeklyDefectsCritical,
+        weeklyRoundsCount,
+        totalDefectsAll,
       });
     });
 
-    // เรียงลำดับ: PM ที่มีไซต์งานมากกว่า หรือคะแนนมากกว่าขึ้นก่อน
+    // เรียงลำดับ: PM ที่มีงานตรวจหรือข้อบกพร่องรวมมากกว่าขึ้นก่อน
     return list.sort((a, b) => {
-      if (b.totalSites !== a.totalSites) return b.totalSites - a.totalSites;
+      const workA = a.totalSites + a.weeklyRoundsCount;
+      const workB = b.totalSites + b.weeklyRoundsCount;
+      if (workB !== workA) return workB - workA;
       return b.performanceScore - a.performanceScore;
     });
-  }, [siteVisits]);
+  }, [siteVisits, weeklyDefects]);
 
   // สเกลสูงสุดสำหรับกราฟแท่ง
   const maxSites = useMemo(() => {
@@ -284,7 +318,7 @@ export default function PMDashboard() {
   }, [pmSummaries]);
 
   const maxDefects = useMemo(() => {
-    const max = Math.max(...pmSummaries.map((p) => p.totalFailed), 0);
+    const max = Math.max(...pmSummaries.map((p) => p.totalDefectsAll), 0);
     return Math.max(10, max);
   }, [pmSummaries]);
 
@@ -294,7 +328,15 @@ export default function PMDashboard() {
     const verifiedSites = siteVisits.filter((v) => v.verified).length;
     const onTimeSites = siteVisits.filter((v) => v.punctuality === "on_time").length;
     const lateSites = siteVisits.filter((v) => v.punctuality === "late").length;
-    const totalNcrs = siteVisits.reduce((acc, v) => acc + v.failCount, 0);
+    const structuralNcrs = siteVisits.reduce((acc, v) => acc + v.failCount, 0);
+
+    const wList = weeklyDefects || [];
+    const totalWeeklyRounds = wList.length;
+    const totalWeeklyDefects = wList.reduce((acc, w) => acc + (w.totalDefects || 0), 0);
+    const totalWeeklyOpen = wList.reduce((acc, w) => acc + (w.openCount + w.inProgressCount || 0), 0);
+    const totalWeeklyResolved = wList.reduce((acc, w) => acc + (w.resolvedCount + w.closedCount || 0), 0);
+    const totalWeeklyCritical = wList.reduce((acc, w) => acc + (w.criticalCount || 0), 0);
+    const totalDefectsAll = structuralNcrs + totalWeeklyDefects;
 
     const onTimeRate = totalSites > 0 ? Math.round((onTimeSites / totalSites) * 100) : 0;
     const verificationRate = totalSites > 0 ? Math.round((verifiedSites / totalSites) * 100) : 0;
@@ -307,9 +349,15 @@ export default function PMDashboard() {
       lateSites,
       onTimeRate,
       verificationRate,
-      totalNcrs,
+      structuralNcrs,
+      totalWeeklyRounds,
+      totalWeeklyDefects,
+      totalWeeklyOpen,
+      totalWeeklyResolved,
+      totalWeeklyCritical,
+      totalDefectsAll,
     };
-  }, [siteVisits, pmSummaries]);
+  }, [siteVisits, pmSummaries, weeklyDefects]);
 
   // กรองรายการไซต์งานที่จะแสดงผล
   const filteredVisits = useMemo(() => {
@@ -341,6 +389,37 @@ export default function PMDashboard() {
 
     return list;
   }, [siteVisits, selectedPm, punctFilter, searchQuery, role, user]);
+
+  // กรองรายการรอบตรวจ Defect รายสัปดาห์
+  const filteredWeeklyDefects = useMemo(() => {
+    let list = weeklyDefects || [];
+
+    // ถ้า Login เป็น PM ให้แสดงเฉพาะรอบตรวจของตนเอง
+    if (role === "pm" && user) {
+      list = list.filter((w) => isRecordOwnedByPm(w.pm, w.createdBy, user));
+    } else if (selectedPm !== "all") {
+      list = list.filter((w) => matchPmName(w.pm) === selectedPm);
+    }
+
+    if (defectStatusFilter === "open") {
+      list = list.filter((w) => (w.openCount + w.inProgressCount) > 0);
+    } else if (defectStatusFilter === "resolved") {
+      list = list.filter((w) => w.totalDefects > 0 && (w.openCount + w.inProgressCount) === 0);
+    } else if (defectStatusFilter === "critical") {
+      list = list.filter((w) => (w.criticalCount || 0) > 0);
+    }
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((w) =>
+        [w.store, w.storeCode, w.contractor, w.pm, `สัปดาห์ที่ ${w.weekNumber}`]
+          .filter(Boolean)
+          .some((val) => String(val).toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [weeklyDefects, selectedPm, defectStatusFilter, searchQuery, role, user]);
 
   return (
     <div className="min-h-screen pb-24 bg-page">
@@ -478,9 +557,11 @@ export default function PMDashboard() {
                 <AlertTriangle className="w-4 h-4 text-rose-300" />
               </div>
               <div className="tnum font-display font-bold text-2xl mt-1.5 text-rose-300">
-                {globalKpis.totalNcrs} <span className="text-xs font-normal text-white/70">จุด</span>
+                {globalKpis.totalDefectsAll} <span className="text-xs font-normal text-white/70">จุด</span>
               </div>
-              <div className="text-[11px] text-rose-200 mt-0.5 truncate">ข้อบกพร่องที่ตรวจพบ</div>
+              <div className="text-[11px] text-rose-200 mt-0.5 truncate" title={`ตรวจ Defect รายวีค ${globalKpis.totalWeeklyDefects} จุด (รอแก้ ${globalKpis.totalWeeklyOpen}) • ตรวจโครงสร้าง ITP ${globalKpis.structuralNcrs} จุด`}>
+                รายวีค {globalKpis.totalWeeklyDefects} จุด • ITP {globalKpis.structuralNcrs} จุด
+              </div>
             </div>
           </div>
         </div>
@@ -560,10 +641,16 @@ export default function PMDashboard() {
                   <span>คะแนนประเมินรวมประสิทธิภาพวิศวกร (0 - 100 คะแนน)</span>
                 </span>
               ) : (
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded bg-gradient-to-t from-rose-600 to-amber-500 shadow-xs" />
-                  <span>จำนวนข้อบกพร่อง Defect / NCR ที่ตรวจพบ (จุด)</span>
-                </span>
+                <div className="flex items-center gap-3 text-ink2 text-[11.5px] flex-wrap">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-amber-500 shadow-xs" />
+                    <span>Defect รายสัปดาห์</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-rose-600 shadow-xs" />
+                    <span>ไม่ผ่านตรวจโครงสร้าง ITP</span>
+                  </span>
+                </div>
               )}
             </div>
 
@@ -618,8 +705,8 @@ export default function PMDashboard() {
                     barHeightPercent = pm.totalSites > 0 ? Math.max(6, pm.performanceScore) : 4;
                     displayValue = pm.totalSites > 0 ? `${pm.performanceScore} คะแนน` : "0";
                   } else {
-                    barHeightPercent = pm.totalFailed > 0 ? Math.max(6, Math.round((pm.totalFailed / maxDefects) * 100)) : 4;
-                    displayValue = `${pm.totalFailed} จุด`;
+                    barHeightPercent = pm.totalDefectsAll > 0 ? Math.max(6, Math.round((pm.totalDefectsAll / maxDefects) * 100)) : 4;
+                    displayValue = `${pm.totalDefectsAll} จุด`;
                   }
 
                   // สัดส่วน Segment ในกรณี sites
@@ -690,7 +777,27 @@ export default function PMDashboard() {
                         ) : chartMetric === "score" ? (
                           <div className="w-full h-full bg-gradient-to-t from-amber-600 via-brand to-sky-400" />
                         ) : (
-                          <div className="w-full h-full bg-gradient-to-t from-rose-600 to-amber-500" />
+                          // แท่ง Defect: แบ่งสัดส่วน Defect รายวีค (ส้ม/เหลือง) กับ ITP ไม่ผ่าน (แดงเข้ม)
+                          pm.totalDefectsAll > 0 ? (
+                            <div className="w-full h-full flex flex-col-reverse">
+                              {pm.totalFailed > 0 && (
+                                <div
+                                  className="w-full bg-rose-600 transition-all"
+                                  style={{ height: `${(pm.totalFailed / pm.totalDefectsAll) * 100}%` }}
+                                  title={`ตรวจโครงสร้าง ITP ไม่ผ่าน: ${pm.totalFailed} จุด`}
+                                />
+                              )}
+                              {pm.weeklyDefectsTotal > 0 && (
+                                <div
+                                  className="w-full bg-amber-500 transition-all"
+                                  style={{ height: `${(pm.weeklyDefectsTotal / pm.totalDefectsAll) * 100}%` }}
+                                  title={`ตรวจ Defect รายสัปดาห์: ${pm.weeklyDefectsTotal} จุด (รอแก้ ${pm.weeklyDefectsOpen} จุด)`}
+                                />
+                              )}
+                            </div>
+                          ) : (
+                            <div className="w-full h-full bg-slate-200 dark:bg-slate-800" />
+                          )
                         )}
                       </div>
 
@@ -823,9 +930,15 @@ export default function PMDashboard() {
                       </div>
                     </div>
                     <div>
-                      <div className="text-[11px] text-ink3">พบ Defect</div>
+                      <div className="text-[11px] text-ink3">พบ Defect รวม</div>
                       <div className="tnum font-bold text-rose-600 dark:text-rose-400 mt-0.5">
-                        {pm.totalFailed} จุด
+                        {pm.totalDefectsAll} จุด
+                      </div>
+                      <div className="text-[9.5px] text-ink3 truncate mt-0.5" title={`ตรวจรายวีค: ${pm.weeklyDefectsTotal} จุด (รอแก้ ${pm.weeklyDefectsOpen}) | ตรวจโครงสร้าง ITP: ${pm.totalFailed} จุด`}>
+                        {pm.weeklyDefectsTotal > 0 ? `วีค ${pm.weeklyDefectsTotal}` : ""}
+                        {pm.weeklyDefectsTotal > 0 && pm.totalFailed > 0 ? " • " : ""}
+                        {pm.totalFailed > 0 ? `ITP ${pm.totalFailed}` : ""}
+                        {pm.totalDefectsAll === 0 ? "ไม่พบปัญหา" : ""}
                       </div>
                     </div>
                   </div>
@@ -853,16 +966,19 @@ export default function PMDashboard() {
 
         {/* ────────── ส่วนที่ 2: ประวัติการเข้าไซต์งาน & แผนงาน ────────── */}
         <section className="card p-4 sm:p-5">
+          {/* ส่วนหัวของ Section 2 พร้อมแท็บสลับดู ITP / Defect รายวีค */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-line">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <MapPin className="w-4 h-4 text-brand" />
                 <h3 className="font-display font-bold text-base text-ink">
-                  ประวัติการเข้าตรวจไซต์งาน & รายการยืนยันพิกัด
+                  {activeView === "sites"
+                    ? "ประวัติการเข้าตรวจไซต์งาน & รายการยืนยันพิกัด (ITP)"
+                    : "รอบตรวจ Defect รายสัปดาห์ & ข้อบกพร่องสะสม (Weekly Defects)"}
                 </h3>
                 {role === "pm" && user ? (
                   <span className="chip bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold text-xs">
-                    📌 เฉพาะไซต์งานของคุณ ({user.name})
+                    📌 เฉพาะงานของคุณ ({user.name})
                   </span>
                 ) : selectedPm !== "all" ? (
                   <span className="chip bg-brand/10 text-brand font-bold text-xs">
@@ -871,24 +987,62 @@ export default function PMDashboard() {
                 ) : null}
               </div>
               <p className="text-xs text-ink2 mt-0.5">
-                แสดงวัน-เวลาเช็คอินจริง เปรียบเทียบกับวันที่นัดหมาย พร้อมพิกัดดาวเทียม GPS
+                {activeView === "sites"
+                  ? "แสดงวัน-เวลาเช็คอินจริง เปรียบเทียบกับวันที่นัดหมาย พร้อมพิกัดดาวเทียม GPS"
+                  : "แสดงใบรอบตรวจ Defect ประจำสัปดาห์ ข้อบกพร่องที่พบ และสถานะการแก้ไขของผู้รับเหมา"}
               </p>
             </div>
 
-            {/* ฟิลเตอร์ & ค้นหา */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="relative flex-1 sm:w-56">
-                <Search className="w-3.5 h-3.5 text-ink3 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ค้นหาชื่อสาขา / รหัส..."
-                  className="field py-1.5 pl-8 text-xs w-full"
-                />
-              </div>
+            {/* ปุ่มสลับ 2 แท็บ: งานตรวจโครงสร้าง ITP / รอบตรวจ Defect รายวีค */}
+            <div className="flex items-center gap-1.5 p-1 bg-sunken rounded-xl border border-line text-xs self-start md:self-auto">
+              <button
+                type="button"
+                onClick={() => setActiveView("sites")}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                  activeView === "sites"
+                    ? "bg-card text-brand shadow-sm font-black"
+                    : "text-ink3 hover:text-ink"
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>ไซต์งาน ITP</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-line text-ink2 font-semibold">
+                  {filteredVisits.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView("defects")}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                  activeView === "defects"
+                    ? "bg-card text-rose-600 dark:text-rose-400 shadow-sm font-black"
+                    : "text-ink3 hover:text-ink"
+                }`}
+              >
+                <Wrench className="w-3.5 h-3.5" />
+                <span>รอบตรวจ Defect รายวีค</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold">
+                  {filteredWeeklyDefects.length}
+                </span>
+              </button>
+            </div>
+          </div>
 
-              {/* กรองตามสถานะความตรงเวลา */}
+          {/* แถบค้นหา & ตัวกรอง */}
+          <div className="flex items-center gap-2 flex-wrap pt-3.5 pb-2">
+            <div className="relative flex-1 sm:w-56">
+              <Search className="w-3.5 h-3.5 text-ink3 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ค้นหาชื่อสาขา / รหัส..."
+                className="field py-1.5 pl-8 text-xs w-full"
+              />
+            </div>
+
+            {activeView === "sites" ? (
+              /* กรองสถานะความตรงเวลาสำหรับไซต์งาน ITP */
               <div className="inline-flex p-1 bg-sunken rounded-xl border border-line text-xs">
                 <button
                   type="button"
@@ -927,174 +1081,346 @@ export default function PMDashboard() {
                   ยังไม่เช็คอิน
                 </button>
               </div>
-            </div>
+            ) : (
+              /* กรองสถานะ Defect สำหรับรอบตรวจ Defect รายสัปดาห์ */
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="inline-flex p-1 bg-sunken rounded-xl border border-line text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setDefectStatusFilter("all")}
+                    className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                      defectStatusFilter === "all" ? "bg-card text-brand shadow-sm font-bold" : "text-ink3 hover:text-ink"
+                    }`}
+                  >
+                    ทั้งหมด
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDefectStatusFilter("open")}
+                    className={`px-2 py-1 rounded-lg font-semibold transition-all ${
+                      defectStatusFilter === "open" ? "bg-card text-amber-600 shadow-sm font-bold" : "text-ink3 hover:text-ink"
+                    }`}
+                  >
+                    รอแก้ไข
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDefectStatusFilter("resolved")}
+                    className={`px-2 py-1 rounded-lg font-semibold transition-all ${
+                      defectStatusFilter === "resolved" ? "bg-card text-emerald-600 shadow-sm font-bold" : "text-ink3 hover:text-ink"
+                    }`}
+                  >
+                    แก้เสร็จแล้ว
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDefectStatusFilter("critical")}
+                    className={`px-2 py-1 rounded-lg font-semibold transition-all ${
+                      defectStatusFilter === "critical" ? "bg-card text-rose-600 shadow-sm font-bold" : "text-ink3 hover:text-ink"
+                    }`}
+                  >
+                    วิกฤต
+                  </button>
+                </div>
+
+                <Link
+                  href="/defects"
+                  className="btn-primary text-xs py-1.5 px-3 inline-flex items-center gap-1 font-bold"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>สร้างรอบตรวจใหม่</span>
+                </Link>
+              </div>
+            )}
           </div>
 
-          {/* รายการไซต์งาน */}
+          {/* รายการแสดงผลตามแท็บที่เลือก */}
           {loading ? (
             <div className="py-16 text-center">
               <div className="w-8 h-8 border-3 border-line border-t-brand rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-ink2 text-xs">กำลังรวบรวมประวัติการเข้าตรวจไซต์งาน…</p>
+              <p className="text-ink2 text-xs">กำลังรวบรวมประวัติการเข้าตรวจไซต์งานและข้อมูล Defect…</p>
             </div>
-          ) : filteredVisits.length === 0 ? (
-            <div className="py-14 text-center">
-              <div className="w-12 h-12 rounded-full bg-sunken grid place-items-center text-ink3 mx-auto mb-2">
-                <Search className="w-6 h-6" />
+          ) : activeView === "sites" ? (
+            /* ────────── มุมมอง 1: ไซต์งานตรวจโครงสร้าง ITP ────────── */
+            filteredVisits.length === 0 ? (
+              <div className="py-14 text-center">
+                <div className="w-12 h-12 rounded-full bg-sunken grid place-items-center text-ink3 mx-auto mb-2">
+                  <Search className="w-6 h-6" />
+                </div>
+                <p className="font-bold text-sm text-ink">ไม่พบประวัติไซต์งานที่ตรงกับเงื่อนไข</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPm("all");
+                    setPunctFilter("all");
+                    setSearchQuery("");
+                  }}
+                  className="mt-2 text-xs text-brand font-bold underline"
+                >
+                  ล้างตัวกรองทั้งหมด
+                </button>
               </div>
-              <p className="font-bold text-sm text-ink">ไม่พบประวัติไซต์งานที่ตรงกับเงื่อนไข</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedPm("all");
-                  setPunctFilter("all");
-                  setSearchQuery("");
-                }}
-                className="mt-2 text-xs text-brand font-bold underline"
-              >
-                ล้างตัวกรองทั้งหมด
-              </button>
-            </div>
+            ) : (
+              <div className="divide-y divide-line/70 mt-2">
+                {filteredVisits.map((v) => {
+                  const pct = Math.round((v.filledCount / TOTAL) * 100);
+
+                  let punctBadge = {
+                    label: "ตรงเวลา",
+                    color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+                    icon: CheckCircle2,
+                  };
+                  if (v.punctuality === "late") {
+                    punctBadge = {
+                      label: "เข้าสาย",
+                      color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+                      icon: Clock,
+                    };
+                  } else if (v.punctuality === "missing") {
+                    punctBadge = {
+                      label: "ยังไม่เช็คอิน",
+                      color: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
+                      icon: XCircle,
+                    };
+                  }
+
+                  const PunctIcon = punctBadge.icon;
+
+                  return (
+                    <div
+                      key={v.recordId}
+                      className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:bg-sunken/40 px-2 sm:px-3 rounded-xl transition-colors"
+                    >
+                      {/* ข้อมูลสาขา & PM */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-display font-bold text-base text-ink">
+                            {v.storeName}
+                          </span>
+                          {v.storeCode !== "-" && (
+                            <span className="chip bg-sunken text-ink2 text-[11px] font-mono">
+                              {v.storeCode}
+                            </span>
+                          )}
+
+                          <span className={`chip border text-[11px] font-bold inline-flex items-center gap-1 ${punctBadge.color}`}>
+                            <PunctIcon className="w-3 h-3" />
+                            <span>{punctBadge.label}</span>
+                          </span>
+
+                          {v.verified && (
+                            <span className="chip bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20 text-[10.5px] font-bold">
+                              ✓ GPS หน้างานจริง
+                            </span>
+                          )}
+
+                          {v.selfiePhoto ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewSelfie(v.selfiePhoto || null)}
+                              className="chip bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30 text-[10.5px] font-bold hover:bg-sky-500/25 transition-colors cursor-pointer flex items-center gap-1"
+                              title="คลิกเพื่อดูรูปถ่าย Selfie คู่หน้างาน"
+                            >
+                              <Camera className="w-3 h-3 text-sky-600" />
+                              <span>ดูรูป Selfie ✓</span>
+                            </button>
+                          ) : (
+                            <span className="chip bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[10.5px] font-bold">
+                              ⚠️ ขาด Selfie
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3 text-xs text-ink2 mt-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5 text-brand" />
+                            <span>PM: <strong>{v.pmName}</strong></span>
+                          </span>
+
+                          <span className="inline-flex items-center gap-1">
+                            <Building2 className="w-3.5 h-3.5 text-ink3" />
+                            <span>ผู้รับเหมา: {v.contractor}</span>
+                          </span>
+
+                          <span className="inline-flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-ink3" />
+                            <span>วันนัดตรวจ: {v.scheduledDate || "-"}</span>
+                          </span>
+                        </div>
+
+                        {/* รายละเอียดการเช็คอิน & พิกัด */}
+                        <div className="mt-2 text-xs flex items-center gap-3 flex-wrap bg-sunken/60 p-2 rounded-lg border border-line/60">
+                          <span className="text-ink2">
+                            <strong>ผลการเข้างาน:</strong> {v.punctualityNote}
+                          </span>
+
+                          {v.checkInTimestamp && (
+                            <span className="text-ink3 text-[11px]">
+                              เวลาจริง: {fmtShortDate(v.checkInTimestamp)} {fmtTime(v.checkInTimestamp)}
+                            </span>
+                          )}
+
+                          {v.lat && v.lng && (
+                            <a
+                              href={`https://www.google.com/maps?q=${v.lat},${v.lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-brand hover:underline font-semibold text-[11px] ml-auto"
+                            >
+                              <MapPin className="w-3 h-3" />
+                              <span>พิกัด {v.lat.toFixed(4)}, {v.lng.toFixed(4)}</span>
+                              {v.accuracy && <span className="text-ink3 font-normal">(±{v.accuracy}ม.)</span>}
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* สถิติงานตรวจ & ปุ่มเปิด */}
+                      <div className="flex items-center gap-4 self-end lg:self-center shrink-0 pt-2 lg:pt-0">
+                        <div className="text-right">
+                          <div className="flex items-center justify-end gap-2 text-xs font-semibold">
+                            <span className="text-pass">✓ ผ่าน {v.passCount}</span>
+                            {v.failCount > 0 && <span className="text-fail font-bold">✕ ไม่ผ่าน {v.failCount}</span>}
+                          </div>
+                          <div className="text-[11px] text-ink3 mt-0.5">
+                            บันทึกแล้ว {v.filledCount}/{TOTAL} ข้อ ({pct}%)
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/record/${v.recordId}`)}
+                          className="btn-secondary px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          <span>เปิดใบตรวจ</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
           ) : (
-            <div className="divide-y divide-line/70 mt-2">
-              {filteredVisits.map((v) => {
-                const pct = Math.round((v.filledCount / TOTAL) * 100);
+            /* ────────── มุมมอง 2: รอบตรวจ Defect รายสัปดาห์ ────────── */
+            filteredWeeklyDefects.length === 0 ? (
+              <div className="py-14 text-center">
+                <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 grid place-items-center mx-auto mb-2">
+                  <Wrench className="w-6 h-6" />
+                </div>
+                <p className="font-bold text-sm text-ink">ยังไม่พบข้อมูลรอบตรวจ Defect สำหรับเงื่อนไขนี้</p>
+                <p className="text-xs text-ink3 mt-1">สามารถสร้างรอบตรวจ Defect ประจำสัปดาห์ใหม่ได้ทันที</p>
+                <Link
+                  href="/defects"
+                  className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold mt-3"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>ไปหน้าระบบตรวจ Defect รายสัปดาห์</span>
+                </Link>
+              </div>
+            ) : (
+              <div className="divide-y divide-line/70 mt-2">
+                {filteredWeeklyDefects.map((w) => {
+                  const pendingCount = w.openCount + w.inProgressCount;
+                  const doneCount = w.closedCount + w.resolvedCount;
 
-                let punctBadge = {
-                  label: "ตรงเวลา",
-                  color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-                  icon: CheckCircle2,
-                };
-                if (v.punctuality === "late") {
-                  punctBadge = {
-                    label: "เข้าสาย",
-                    color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-                    icon: Clock,
-                  };
-                } else if (v.punctuality === "missing") {
-                  punctBadge = {
-                    label: "ยังไม่เช็คอิน",
-                    color: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
-                    icon: XCircle,
-                  };
-                }
-
-                const PunctIcon = punctBadge.icon;
-
-                return (
-                  <div
-                    key={v.recordId}
-                    className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:bg-sunken/40 px-2 sm:px-3 rounded-xl transition-colors"
-                  >
-                    {/* ข้อมูลสาขา & PM */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-display font-bold text-base text-ink">
-                          {v.storeName}
-                        </span>
-                        {v.storeCode !== "-" && (
-                          <span className="chip bg-sunken text-ink2 text-[11px] font-mono">
-                            {v.storeCode}
+                  return (
+                    <div
+                      key={w.id}
+                      className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:bg-sunken/40 px-2 sm:px-3 rounded-xl transition-colors"
+                    >
+                      {/* ข้อมูลสาขา & PM */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-display font-bold text-base text-ink">
+                            {w.store}
                           </span>
-                        )}
+                          {w.storeCode && w.storeCode !== "-" && (
+                            <span className="chip bg-sunken text-ink2 text-[11px] font-mono">
+                              {w.storeCode}
+                            </span>
+                          )}
 
-                        <span className={`chip border text-[11px] font-bold inline-flex items-center gap-1 ${punctBadge.color}`}>
-                          <PunctIcon className="w-3 h-3" />
-                          <span>{punctBadge.label}</span>
-                        </span>
-
-                        {v.verified && (
-                          <span className="chip bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20 text-[10.5px] font-bold">
-                            ✓ GPS หน้างานจริง
+                          <span className="chip bg-brand/10 text-brand text-[11px] font-bold">
+                            สัปดาห์ที่ {w.weekNumber}
                           </span>
-                        )}
 
-                        {v.selfiePhoto ? (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewSelfie(v.selfiePhoto || null)}
-                            className="chip bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30 text-[10.5px] font-bold hover:bg-sky-500/25 transition-colors cursor-pointer flex items-center gap-1"
-                            title="คลิกเพื่อดูรูปถ่าย Selfie คู่หน้างาน"
-                          >
-                            <Camera className="w-3 h-3 text-sky-600" />
-                            <span>ดูรูป Selfie ✓</span>
-                          </button>
-                        ) : (
-                          <span className="chip bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[10.5px] font-bold">
-                            ⚠️ ขาด Selfie
-                          </span>
-                        )}
-                      </div>
+                          {w.criticalCount > 0 && (
+                            <span className="chip bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 text-[10.5px] font-bold flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 text-rose-600" />
+                              <span>วิกฤต {w.criticalCount} จุด</span>
+                            </span>
+                          )}
 
-                      <div className="flex items-center gap-3 text-xs text-ink2 mt-1.5 flex-wrap">
-                        <span className="inline-flex items-center gap-1">
-                          <Users className="w-3.5 h-3.5 text-brand" />
-                          <span>PM: <strong>{v.pmName}</strong></span>
-                        </span>
-
-                        <span className="inline-flex items-center gap-1">
-                          <Building2 className="w-3.5 h-3.5 text-ink3" />
-                          <span>ผู้รับเหมา: {v.contractor}</span>
-                        </span>
-
-                        <span className="inline-flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5 text-ink3" />
-                          <span>วันนัดตรวจ: {v.scheduledDate || "-"}</span>
-                        </span>
-                      </div>
-
-                      {/* รายละเอียดการเช็คอิน & พิกัด */}
-                      <div className="mt-2 text-xs flex items-center gap-3 flex-wrap bg-sunken/60 p-2 rounded-lg border border-line/60">
-                        <span className="text-ink2">
-                          <strong>ผลการเข้างาน:</strong> {v.punctualityNote}
-                        </span>
-
-                        {v.checkInTimestamp && (
-                          <span className="text-ink3 text-[11px]">
-                            เวลาจริง: {fmtShortDate(v.checkInTimestamp)} {fmtTime(v.checkInTimestamp)}
-                          </span>
-                        )}
-
-                        {v.lat && v.lng && (
-                          <a
-                            href={`https://www.google.com/maps?q=${v.lat},${v.lng}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-brand hover:underline font-semibold text-[11px] ml-auto"
-                          >
-                            <MapPin className="w-3 h-3" />
-                            <span>พิกัด {v.lat.toFixed(4)}, {v.lng.toFixed(4)}</span>
-                            {v.accuracy && <span className="text-ink3 font-normal">(±{v.accuracy}ม.)</span>}
-                            <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* สถิติงานตรวจ & ปุ่มเปิด */}
-                    <div className="flex items-center gap-4 self-end lg:self-center shrink-0 pt-2 lg:pt-0">
-                      <div className="text-right">
-                        <div className="flex items-center justify-end gap-2 text-xs font-semibold">
-                          <span className="text-pass">✓ ผ่าน {v.passCount}</span>
-                          {v.failCount > 0 && <span className="text-fail font-bold">✕ ไม่ผ่าน {v.failCount}</span>}
+                          {w.checkInVerified && (
+                            <span className="chip bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20 text-[10.5px] font-bold">
+                              ✓ GPS หน้างานจริง
+                            </span>
+                          )}
                         </div>
-                        <div className="text-[11px] text-ink3 mt-0.5">
-                          บันทึกแล้ว {v.filledCount}/{TOTAL} ข้อ ({pct}%)
+
+                        <div className="flex items-center gap-3 text-xs text-ink2 mt-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5 text-brand" />
+                            <span>PM ผู้ตรวจ: <strong>{w.pm}</strong></span>
+                          </span>
+
+                          <span className="inline-flex items-center gap-1">
+                            <Building2 className="w-3.5 h-3.5 text-ink3" />
+                            <span>ผู้รับเหมา: {w.contractor}</span>
+                          </span>
+
+                          <span className="inline-flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-ink3" />
+                            <span>วันที่ตรวจ: {w.inspDate || "-"}</span>
+                          </span>
+                        </div>
+
+                        {/* สรุปตัวเลข Defect */}
+                        <div className="mt-2 text-xs flex items-center gap-3 flex-wrap bg-sunken/60 p-2 rounded-lg border border-line/60">
+                          <span className="font-semibold text-ink">
+                            Defect ทั้งหมด: <strong className="text-brand text-sm">{w.totalDefects}</strong> จุด
+                          </span>
+
+                          <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
+                            <span>⚠️ รอแก้ไข {pendingCount}</span>
+                          </span>
+
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                            <span>✓ แก้ไขแล้ว {doneCount}</span>
+                          </span>
+
+                          <div className="ml-auto flex items-center gap-2 text-ink3 text-[11px]">
+                            <span>ความคืบหน้า</span>
+                            <span className="font-bold text-ink">{w.resolutionRate}%</span>
+                            <div className="w-16 h-1.5 bg-line rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-emerald-500 rounded-full transition-all"
+                                style={{ width: `${w.resolutionRate}%` }}
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/record/${v.recordId}`)}
-                        className="btn-secondary px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap"
-                      >
-                        <span>เปิดใบตรวจ</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
+                      {/* ปุ่มเปิดตรวจ & จัดการ Defect */}
+                      <div className="flex items-center gap-3 self-end lg:self-center shrink-0 pt-2 lg:pt-0">
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/defects/${w.id}`)}
+                          className="btn-primary px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shadow-sm hover:scale-[1.02] active:scale-95 transition-all"
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          <span>เปิดตรวจ / จัดการ Defect</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </section>
       </main>

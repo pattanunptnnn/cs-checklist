@@ -156,12 +156,18 @@ export interface PMPerformance {
   onTimeRate: number;      // % ความตรงต่อเวลา
   verificationRate: number;// % การเข้าตรวจหน้างานจริง
   totalPassed: number;
-  totalFailed: number;     // จำนวนข้อบกพร่องที่ตรวจพบ
+  totalFailed: number;     // จำนวนข้อบกพร่องที่ตรวจพบ (ITP)
   totalFilled: number;
   completionRate: number;  // % การตรวจครบถ้วน
   performanceScore: number;// คะแนนรวม 0-100
   tier: "ยอดเยี่ยม" | "ดีมาก" | "มาตรฐาน" | "ต้องปรับปรุง";
   visits: PMSiteVisit[];
+  weeklyDefectsTotal: number;
+  weeklyDefectsOpen: number;
+  weeklyDefectsResolved: number;
+  weeklyDefectsCritical: number;
+  weeklyRoundsCount: number;
+  totalDefectsAll: number;
 }
 
 // ============================================================
@@ -214,6 +220,8 @@ export interface WeeklyDefectRecord {
   overallNote?: string;
   savedAt: string | null;
   createdAt?: number;
+  createdBy?: string;
+  createdByName?: string;
 }
 
 // ข้อมูลสรุปสำหรับหน้ารายการ Weekly Defect
@@ -234,6 +242,8 @@ export interface WeeklyDefectSummary {
   resolutionRate: number; // % แก้เสร็จ (closed / total)
   checkInVerified: boolean;
   savedAt: string | null;
+  createdBy?: string;
+  createdByName?: string;
 }
 
 // ============================================================

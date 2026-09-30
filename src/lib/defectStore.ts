@@ -67,6 +67,8 @@ export async function listWeeklyRecords(): Promise<WeeklyDefectSummary[]> {
             ...stats,
             checkInVerified: Boolean(row.check_in?.verified),
             savedAt: row.saved_at || null,
+            createdBy: row.created_by || row.createdBy,
+            createdByName: row.created_by_name || row.createdByName,
           };
         });
       }
@@ -97,6 +99,8 @@ export async function listWeeklyRecords(): Promise<WeeklyDefectSummary[]> {
         ...stats,
         checkInVerified: Boolean(rec.checkIn?.verified),
         savedAt: rec.savedAt || null,
+        createdBy: rec.createdBy,
+        createdByName: rec.createdByName,
       });
     } catch {
       // ข้ามไฟล์เสีย
@@ -141,6 +145,8 @@ export async function getWeeklyRecord(id: string): Promise<WeeklyDefectRecord | 
           overallNote: data.overall_note || "",
           savedAt: data.saved_at || null,
           createdAt: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
+          createdBy: data.created_by || data.createdBy,
+          createdByName: data.created_by_name || data.createdByName,
         };
       }
     } catch (e) {
@@ -174,6 +180,8 @@ export async function createWeeklyRecord(data: Partial<WeeklyDefectRecord>): Pro
     overallNote: data.overallNote || "",
     savedAt: new Date().toISOString(),
     createdAt: Date.now(),
+    createdBy: data.createdBy,
+    createdByName: data.createdByName,
   };
 
   const supabase = getSupabase();
@@ -212,21 +220,28 @@ export async function createWeeklyRecord(data: Partial<WeeklyDefectRecord>): Pro
 // 4. บันทึก / แก้ไขรอบตรวจ Defect
 // ------------------------------------------------------------
 export async function saveWeeklyRecord(record: WeeklyDefectRecord): Promise<void> {
+  const existing = await getWeeklyRecord(record.id);
+  const recToSave: WeeklyDefectRecord = {
+    ...record,
+    createdBy: record.createdBy || existing?.createdBy,
+    createdByName: record.createdByName || existing?.createdByName,
+  };
+
   const supabase = getSupabase();
   if (supabase) {
     try {
       await supabase.from("weekly_defects").upsert({
-        id: record.id,
-        store: record.store,
-        store_code: record.storeCode,
-        week_number: record.weekNumber,
-        week_title: record.weekTitle,
-        insp_date: record.inspDate,
-        contractor: record.contractor,
-        pm: record.pm,
-        check_in: record.checkIn,
-        defects: record.defects,
-        overall_note: record.overallNote,
+        id: recToSave.id,
+        store: recToSave.store,
+        store_code: recToSave.storeCode,
+        week_number: recToSave.weekNumber,
+        week_title: recToSave.weekTitle,
+        insp_date: recToSave.inspDate,
+        contractor: recToSave.contractor,
+        pm: recToSave.pm,
+        check_in: recToSave.checkIn,
+        defects: recToSave.defects,
+        overall_note: recToSave.overallNote,
         saved_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -237,7 +252,7 @@ export async function saveWeeklyRecord(record: WeeklyDefectRecord): Promise<void
 
   try {
     await ensureDir();
-    await fs.writeFile(fileOf(record.id), JSON.stringify(record, null, 2), "utf8");
+    await fs.writeFile(fileOf(recToSave.id), JSON.stringify(recToSave, null, 2), "utf8");
   } catch {
     // ignore
   }
