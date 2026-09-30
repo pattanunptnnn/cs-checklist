@@ -3,6 +3,7 @@ node_modules
 out
 data/records/*.json
 data/defects/*.json
+data/otps.json
 uploads/*
 !uploads/.gitkeep
 npm-debug.log*

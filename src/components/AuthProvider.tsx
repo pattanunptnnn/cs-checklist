@@ -21,6 +21,7 @@ interface AuthContextType {
   }) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   switchRole: (newRole: UserRole) => void;
+  setAuthenticatedUser: (user: AuthUser) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -117,6 +118,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(targetUser));
   }, []);
 
+  const setAuthenticatedUser = useCallback((authedUser: AuthUser) => {
+    setUser(authedUser);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(authedUser));
+  }, []);
+
   const role = user?.role || "pm";
   const isAuthenticated = Boolean(user);
 
@@ -151,6 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         register,
         logout,
         switchRole,
+        setAuthenticatedUser,
       }}
     >
       {children}
