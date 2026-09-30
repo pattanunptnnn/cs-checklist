@@ -14,30 +14,20 @@ export interface PMInfo {
   id: string;
   name: string;
   zone: string;
-  email: string;
+  email?: string;
   phone?: string;
 }
 
-// รายชื่อ Project Manager (PM) และโซนรับผิดชอบ
+// รายชื่อ Project Manager (PM) และโซนรับผิดชอบตามเอกสาร Big-C
 export const BIGC_PMS: PMInfo[] = [
-  { id: "pm-thienchai", name: "K. Thienchai", zone: "BKK1", email: "thienchai@bigc.co.th" },
-  { id: "pm-chaichana", name: "K. Chaichana", zone: "BKK2", email: "chaichana@bigc.co.th" },
-  { id: "pm-pongsak", name: "K. Pongsak", zone: "BKK2", email: "pongsak@bigc.co.th" },
-  { id: "pm-vaigoon", name: "K. Vaigoon", zone: "East & NE2", email: "vaigoon@bigc.co.th" },
-  { id: "pm-tawat", name: "K. Tawat", zone: "North & Central", email: "tawat@bigc.co.th" },
-  { id: "pm-wicharn", name: "K. Wicharn", zone: "Northeast1", email: "wicharn@bigc.co.th" },
-  { id: "pm-chinakorn", name: "K. Chinakorn", zone: "North & Central", email: "chinakorn@bigc.co.th" },
+  { id: "pm-thienchai", name: "K. Thienchai", zone: "BKK1" },
+  { id: "pm-chaichana", name: "K. Chaichana", zone: "BKK2" },
+  { id: "pm-pongsak", name: "K. Pongsak", zone: "BKK2" },
+  { id: "pm-vaigoon", name: "K. Vaigoon", zone: "East & NE2" },
+  { id: "pm-tawat", name: "K. Tawat", zone: "North & Central" },
+  { id: "pm-wicharn", name: "K. Wicharn", zone: "Northeast1" },
+  { id: "pm-chinakorn", name: "K. Chinakorn", zone: "North & Central" },
 ];
-
-export const PM_USERS: RegisteredUser[] = BIGC_PMS.map((pm) => ({
-  id: pm.id,
-  email: pm.email,
-  password: "pm1234",
-  name: pm.name,
-  role: "pm",
-  title: `Project Manager (${pm.zone})`,
-  phone: pm.phone || "081-xxx-xxxx",
-}));
 
 export const DEMO_USERS: Record<UserRole, AuthUser & { password: string }> = {
   admin: {
@@ -51,8 +41,8 @@ export const DEMO_USERS: Record<UserRole, AuthUser & { password: string }> = {
   },
   pm: {
     id: "pm-thienchai",
-    email: "thienchai@bigc.co.th",
-    password: "pm1234",
+    email: "thienchai@company.com",
+    password: "1234",
     name: "K. Thienchai",
     role: "pm",
     title: "Project Manager (BKK1)",
@@ -72,7 +62,6 @@ export const DEMO_USERS: Record<UserRole, AuthUser & { password: string }> = {
 export const INITIAL_USERS: RegisteredUser[] = [
   DEMO_USERS.admin,
   DEMO_USERS.supervisor,
-  ...PM_USERS,
 ];
 
 const USERS_STORAGE_KEY = "bigc_cs_registered_users";
@@ -87,23 +76,13 @@ export function getRegisteredUsers(): RegisteredUser[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      // ตรวจสอบและอัปเดตรายชื่อ PM ทั้ง 7 ท่าน พร้อมคำนำหน้า K.
-      let hasUpdate = false;
-      const merged = [...parsed];
-      for (const pmUser of PM_USERS) {
-        const foundIdx = merged.findIndex((u: any) => u.email?.toLowerCase() === pmUser.email.toLowerCase());
-        if (foundIdx === -1) {
-          merged.push(pmUser);
-          hasUpdate = true;
-        } else if (merged[foundIdx].name !== pmUser.name) {
-          merged[foundIdx] = { ...merged[foundIdx], name: pmUser.name, title: pmUser.title };
-          hasUpdate = true;
-        }
+      // คัดกรองอีเมลปลอม @bigc.co.th ของ PM ในอดีตออก เพื่อให้ใช้เมลจริงที่ลงทะเบียน
+      const fakePmEmails = ["thienchai@bigc.co.th", "chaichana@bigc.co.th", "pongsak@bigc.co.th", "vaigoon@bigc.co.th", "tawat@bigc.co.th", "wicharn@bigc.co.th", "chinakorn@bigc.co.th"];
+      const cleaned = parsed.filter((u: any) => !fakePmEmails.includes(u.email?.toLowerCase()));
+      if (cleaned.length !== parsed.length) {
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(cleaned));
       }
-      if (hasUpdate) {
-        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(merged));
-      }
-      return merged;
+      return cleaned;
     }
     return INITIAL_USERS;
   } catch {

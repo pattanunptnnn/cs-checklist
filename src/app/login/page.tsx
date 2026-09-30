@@ -268,14 +268,6 @@ export default function LoginPage() {
     }
   }
 
-  // ผู้ช่วยสำหรับคลิกเลือกบัญชี PM ด่วน (ใส่ทั้ง Email และ รหัสผ่านให้ทันที)
-  function selectQuickPm(email: string) {
-    setSignInEmail(email);
-    setSignInPassword("pm1234");
-    setErrorMsg("");
-    setSuccessMsg("");
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-[#0c233c] to-[#08182b] text-white flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background blueprint decorative pattern */}
@@ -405,7 +397,7 @@ export default function LoginPage() {
                     autoFocus
                     value={signInEmail}
                     onChange={(e) => setSignInEmail(e.target.value)}
-                    placeholder="เช่น thienchai@bigc.co.th หรืออีเมลที่ลงทะเบียนไว้"
+                    placeholder="กรอกอีเมลของคุณ"
                     className="field pl-10 text-sm"
                   />
                 </div>
@@ -416,9 +408,6 @@ export default function LoginPage() {
                   <label className="block text-xs font-bold text-ink2">
                     รหัสผ่าน (Password) <span className="text-rose-500">*</span>
                   </label>
-                  <span className="text-[11px] text-ink3">
-                    บัญชีทดสอบ: <code className="bg-sunken px-1 rounded text-brand font-mono font-bold">pm1234</code> หรือ <code className="bg-sunken px-1 rounded text-brand font-mono font-bold">1234</code>
-                  </span>
                 </div>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink3">
@@ -466,74 +455,6 @@ export default function LoginPage() {
                   สมัครสร้างบัญชีใหม่ (พร้อมยืนยัน OTP ครั้งแรก)
                 </button>
               </div>
-
-              {/* รายชื่อ PM 7 ท่าน สำหรับคลิกเข้าสู่ระบบด่วน (Quick PM Selection) */}
-              <div className="mt-5 pt-4 border-t border-line/70">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-ink flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-brand" />
-                    <span>เข้าสู่ระบบด่วนด้วยบัญชี PM (7 ท่าน):</span>
-                  </span>
-                  <span className="text-[10.5px] text-brand font-semibold">คลิกเลือกแล้วเข้าได้ทันที</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1.5 bg-sunken/80 rounded-xl border border-line">
-                  {BIGC_PMS.map((pm) => {
-                    const isSelected = signInEmail.toLowerCase() === pm.email.toLowerCase();
-                    return (
-                      <button
-                        key={pm.id}
-                        type="button"
-                        onClick={() => selectQuickPm(pm.email)}
-                        className={`p-2 rounded-lg text-left transition-all border text-xs flex flex-col cursor-pointer ${
-                          isSelected
-                            ? "bg-brand/10 border-brand text-brand font-bold shadow-xs"
-                            : "bg-card border-line/60 text-ink hover:border-brand/40 hover:bg-card/80"
-                        }`}
-                      >
-                        <div className="font-bold truncate text-[11.5px] flex items-center justify-between gap-1">
-                          <span>{pm.name}</span>
-                          <span className="text-[9.5px] font-semibold px-1 py-0.2 rounded bg-sunken text-brand shrink-0">
-                            {pm.zone}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-ink3 truncate font-normal mt-0.5">
-                          {pm.email}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* บัญชีอื่นๆ Admin / Supervisor */}
-              <div className="mt-3 pt-3 border-t border-line/60 text-xs text-ink3">
-                <div className="font-semibold text-ink2 mb-1">หรือคลิกเลือกบัญชี Admin / Supervisor:</div>
-                <div className="flex flex-wrap gap-2 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSignInEmail("admin@bigc.co.th");
-                      setSignInPassword("admin1234");
-                      setErrorMsg("");
-                    }}
-                    className="chip bg-card hover:bg-brand/10 hover:text-brand border text-[11px] cursor-pointer"
-                  >
-                    👑 Admin (admin@bigc.co.th)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSignInEmail("supervisor.wichai@bigc.co.th");
-                      setSignInPassword("sup1234");
-                      setErrorMsg("");
-                    }}
-                    className="chip bg-card hover:bg-brand/10 hover:text-brand border text-[11px] cursor-pointer"
-                  >
-                    🛡️ Supervisor (supervisor.wichai@bigc.co.th)
-                  </button>
-                </div>
-              </div>
             </form>
           )}
 
@@ -544,6 +465,29 @@ export default function LoginPage() {
                 <label className="block text-xs font-bold text-ink2 mb-1.5">
                   ชื่อ - นามสกุล <span className="text-rose-500">*</span>
                 </label>
+                {signUpRole === "pm" && (
+                  <div className="mb-2">
+                    <select
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          const pm = BIGC_PMS.find((p) => p.name === val);
+                          setSignUpName(val);
+                          if (pm) setSignUpTitle(`Project Manager (${pm.zone})`);
+                        }
+                      }}
+                      className="field text-xs mb-1.5 py-2 cursor-pointer bg-card"
+                      defaultValue=""
+                    >
+                      <option value="">-- เลือกชื่อ PM ประจำโซน (7 ท่าน) หรือพิมพ์ด้านล่าง --</option>
+                      {BIGC_PMS.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name} ({p.zone})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink3">
                     <User className="w-4 h-4" />
@@ -553,7 +497,7 @@ export default function LoginPage() {
                     required
                     value={signUpName}
                     onChange={(e) => setSignUpName(e.target.value)}
-                    placeholder="เช่น สมศักดิ์ สุขใจ หรือ K. Somchai"
+                    placeholder="เช่น K. Thienchai หรือชื่อ-นามสกุลจริง"
                     className="field pl-10 text-sm"
                   />
                 </div>
