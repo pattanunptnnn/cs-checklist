@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import UserNav from "./UserNav";
 import { BIGC_PMS } from "@/lib/auth";
+import { useAuth } from "./AuthProvider";
 
 const TOTAL = totalItems();
 
@@ -108,6 +109,7 @@ function evaluatePunctuality(
 
 export default function PMDashboard() {
   const router = useRouter();
+  const { user, role } = useAuth();
   const [records, setRecords] = useState<RecordSummary[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPm, setSelectedPm] = useState<string>("all");
@@ -115,6 +117,22 @@ export default function PMDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [previewSelfie, setPreviewSelfie] = useState<string | null>(null);
   const [chartMetric, setChartMetric] = useState<"sites" | "ontime" | "score" | "defects">("sites");
+
+  // เมื่อผู้ใช้เข้าสู่ระบบเป็น PM ให้เลือกดูสถิติของตนเองเป็นหลัก
+  useEffect(() => {
+    if (role === "pm" && user?.name) {
+      const cleanUser = user.name.replace(/^K\.\s*/i, "").trim().toLowerCase();
+      const matched = BIGC_PMS.find((p) => {
+        const pClean = p.name.replace(/^K\.\s*/i, "").trim().toLowerCase();
+        return pClean === cleanUser || pClean.includes(cleanUser) || cleanUser.includes(pClean);
+      });
+      if (matched) {
+        setSelectedPm(matched.name);
+      } else {
+        setSelectedPm(user.name);
+      }
+    }
+  }, [role, user]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -297,7 +315,14 @@ export default function PMDashboard() {
   const filteredVisits = useMemo(() => {
     let list = siteVisits;
 
-    if (selectedPm !== "all") {
+    // ถ้า Login เป็น PM ให้แสดงเฉพาะรายการไซต์งานของ PM ท่านนั้น
+    if (role === "pm" && user) {
+      const cleanUser = user.name.replace(/^K\.\s*/i, "").trim().toLowerCase();
+      list = list.filter((v) => {
+        const vClean = (v.pmName || "").replace(/^K\.\s*/i, "").trim().toLowerCase();
+        return vClean === cleanUser || vClean.includes(cleanUser) || cleanUser.includes(vClean);
+      });
+    } else if (selectedPm !== "all") {
       list = list.filter((v) => v.pmName === selectedPm);
     }
 
@@ -315,7 +340,7 @@ export default function PMDashboard() {
     }
 
     return list;
-  }, [siteVisits, selectedPm, punctFilter, searchQuery]);
+  }, [siteVisits, selectedPm, punctFilter, searchQuery, role, user]);
 
   return (
     <div className="min-h-screen pb-24 bg-page">
@@ -765,8 +790,13 @@ export default function PMDashboard() {
                         {pm.pmName.slice(0, 1)}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-display font-bold text-sm sm:text-base text-ink truncate flex items-center gap-1.5">
+                        <div className="font-display font-bold text-sm sm:text-base text-ink truncate flex items-center gap-1.5 flex-wrap">
                           <span>{pm.pmName}</span>
+                          {role === "pm" && user && (pm.pmName.toLowerCase().replace(/^k\.\s*/, "").includes(user.name.toLowerCase().replace(/^k\.\s*/, "")) || user.name.toLowerCase().replace(/^k\.\s*/, "").includes(pm.pmName.toLowerCase().replace(/^k\.\s*/, ""))) && (
+                            <span className="chip bg-sky-500 text-white text-[9.5px] font-bold py-0.2">
+                              คุณ (บัญชีนี้)
+                            </span>
+                          )}
                           {pm.zone && (
                             <span className="chip bg-sunken text-brand text-[9.5px] font-bold py-0.2">
                               {pm.zone}
@@ -830,11 +860,15 @@ export default function PMDashboard() {
                 <h3 className="font-display font-bold text-base text-ink">
                   ประวัติการเข้าตรวจไซต์งาน & รายการยืนยันพิกัด
                 </h3>
-                {selectedPm !== "all" && (
+                {role === "pm" && user ? (
+                  <span className="chip bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold text-xs">
+                    📌 เฉพาะไซต์งานของคุณ ({user.name})
+                  </span>
+                ) : selectedPm !== "all" ? (
                   <span className="chip bg-brand/10 text-brand font-bold text-xs">
                     PM: {selectedPm}
                   </span>
-                )}
+                ) : null}
               </div>
               <p className="text-xs text-ink2 mt-0.5">
                 แสดงวัน-เวลาเช็คอินจริง เปรียบเทียบกับวันที่นัดหมาย พร้อมพิกัดดาวเทียม GPS

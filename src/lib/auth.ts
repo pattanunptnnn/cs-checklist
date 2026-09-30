@@ -279,3 +279,43 @@ export function canSignAsApprover(role?: UserRole | null): boolean {
 export function canSignInspection(role?: UserRole | null): boolean {
   return role === "pm" || role === "supervisor" || role === "admin";
 }
+
+// ตรวจสอบว่าใบตรวจ/รอบตรวจเป็นงานของ PM คนนี้หรือไม่ (Admin และ Supervisor จะเห็นทั้งหมด)
+export function isRecordOwnedByPm(
+  recordPm: string | undefined | null,
+  createdBy: string | undefined | null,
+  user: AuthUser | null | undefined
+): boolean {
+  if (!user) return true;
+
+  // Admin และ Supervisor มีสิทธิ์เห็นงานของทุกไซต์/ทุกคน
+  if (user.role === "admin" || user.role === "supervisor") {
+    return true;
+  }
+
+  // กรณีผู้ใช้เป็น PM: เห็นเฉพาะงานที่ตนเองสร้าง หรือได้รับมอบหมายเป็น PM ของงานนั้น
+  if (user.role === "pm") {
+    // 1. ตรวจสอบ direct createdBy ID หรือ Email
+    if (createdBy && (createdBy === user.id || createdBy === user.email)) {
+      return true;
+    }
+
+    if (!recordPm) {
+      return false;
+    }
+
+    // 2. ตรวจสอบชื่อ PM (Normalize ตัด K. และ whitespace)
+    const cleanRecord = recordPm.toLowerCase().replace(/^k\.\s*/i, "").trim();
+    const cleanUser = user.name.toLowerCase().replace(/^k\.\s*/i, "").trim();
+
+    if (
+      cleanRecord.includes(cleanUser) ||
+      cleanUser.includes(cleanRecord) ||
+      (user.id && recordPm.toLowerCase().includes(user.id.toLowerCase()))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}

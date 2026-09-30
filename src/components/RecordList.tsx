@@ -6,6 +6,8 @@ import { checklist, totalItems } from "@/lib/checklist";
 import type { RecordSummary } from "@/lib/types";
 import Link from "next/link";
 import UserNav from "./UserNav";
+import { useAuth } from "./AuthProvider";
+import { isRecordOwnedByPm } from "@/lib/auth";
 import {
   Plus,
   Search,
@@ -43,6 +45,7 @@ function fmtShort(iso: string | null): string {
 
 export default function RecordList() {
   const router = useRouter();
+  const { user, role } = useAuth();
   const [rows, setRows] = useState<RecordSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -63,9 +66,16 @@ export default function RecordList() {
 
   useEffect(() => { load(); }, [load]);
 
-  const shown = useMemo(() => {
+  // กรองเฉพาะงานของ PM คนนี้ (กรณีเป็น PM) — ถ้าเป็น Admin หรือ Supervisor จะเห็นงานทั้งหมด
+  const pmScopedRows = useMemo(() => {
     if (!rows) return null;
-    let list = rows;
+    if (!user || role === "admin" || role === "supervisor") return rows;
+    return rows.filter((r) => isRecordOwnedByPm(r.project?.pm, (r as any).createdBy || r.project?.createdBy, user));
+  }, [rows, user, role]);
+
+  const shown = useMemo(() => {
+    if (!pmScopedRows) return null;
+    let list = pmScopedRows;
 
     if (statusFilter === "has_fail") {
       list = list.filter((r) => r.fail > 0);
@@ -83,29 +93,35 @@ export default function RecordList() {
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(needle));
     });
-  }, [rows, q, statusFilter]);
+  }, [pmScopedRows, q, statusFilter]);
 
-  // สถิติรวม
+  // สถิติรวม (คำนวณจากงานเฉพาะของตนเองถ้าเป็น PM)
   const stats = useMemo(() => {
-    if (!rows) return { totalRecords: 0, hasFail: 0, completed: 0, inProgress: 0 };
+    if (!pmScopedRows) return { totalRecords: 0, hasFail: 0, completed: 0, inProgress: 0 };
     return {
-      totalRecords: rows.length,
-      hasFail: rows.filter((r) => r.fail > 0).length,
-      completed: rows.filter((r) => r.filled === TOTAL).length,
-      inProgress: rows.filter((r) => r.filled > 0 && r.filled < TOTAL && r.fail === 0).length,
+      totalRecords: pmScopedRows.length,
+      hasFail: pmScopedRows.filter((r) => r.fail > 0).length,
+      completed: pmScopedRows.filter((r) => r.filled === TOTAL).length,
+      inProgress: pmScopedRows.filter((r) => r.filled > 0 && r.filled < TOTAL && r.fail === 0).length,
     };
-  }, [rows]);
+  }, [pmScopedRows]);
 
   async function newRecord() {
     setCreating(true);
     try {
+      const pmVal = role === "pm" && user ? user.name : "";
       const res = await fetch("/api/records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           project: {
             inspDate: new Date().toISOString().slice(0, 10),
+            pm: pmVal,
+            createdBy: user?.id || "",
+            createdByName: user?.name || "",
           },
+          createdBy: user?.id || "",
+          createdByName: user?.name || "",
           items: {},
           savedAt: null,
           approvalStatus: "รอตรวจ",
@@ -251,6 +267,19 @@ export default function RecordList() {
           </div>
         )}
 
+        {/* ── แถบแจ้งเตือนสถานะเฉพาะ PM ── */}
+        {role === "pm" && user && (
+          <div className="mb-4 px-4 py-2.5 rounded-2xl bg-sky-500/10 border border-sky-500/25 text-xs text-sky-800 dark:text-sky-200 flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2 font-medium">
+              <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse shrink-0" />
+              <span>โหมด PM: กำลังแสดงเฉพาะใบตรวจของ <strong>{user.name}</strong></span>
+            </div>
+            <span className="chip bg-sky-500/20 text-sky-900 dark:text-sky-100 font-bold text-[11px] shrink-0">
+              {pmScopedRows?.length || 0} ใบตรวจ
+            </span>
+          </div>
+        )}
+
         {/* ── แถบเครื่องมือ ค้นหา + ตัวกรองสถานะ ── */}
         <div className="flex flex-col sm:flex-row gap-3 mb-5 items-stretch sm:items-center">
           <div className="relative flex-1">
@@ -303,14 +332,18 @@ export default function RecordList() {
         )}
 
         {/* ── ไม่มีข้อมูลเลย ── */}
-        {rows !== null && rows.length === 0 && !failed && (
+        {pmScopedRows !== null && pmScopedRows.length === 0 && !failed && (
           <div className="card text-center py-16 px-6 border-dashed border-2">
             <div className="w-16 h-16 rounded-2xl bg-brand/10 text-brand grid place-items-center mx-auto mb-4">
               <ClipboardList className="w-8 h-8 stroke-[1.5]" />
             </div>
-            <h2 className="font-display font-bold text-xl text-ink">ยังไม่มีใบตรวจในระบบ</h2>
+            <h2 className="font-display font-bold text-xl text-ink">
+              {role === "pm" ? `ยังไม่มีใบตรวจของ ${user?.name || "คุณ"}` : "ยังไม่มีใบตรวจในระบบ"}
+            </h2>
             <p className="text-ink2 text-sm max-w-sm mx-auto mt-2 leading-relaxed">
-              เริ่มต้นสร้างใบตรวจใหม่เพื่อบันทึกงานโครงสร้างตามมาตรฐาน ITP ครบทั้ง {TOTAL} รายการ
+              {role === "pm"
+                ? "กดปุ่ม 'สร้างใบตรวจใหม่' ด้านล่างเพื่อเริ่มสร้างใบตรวจงานโครงสร้างของตนเอง"
+                : `เริ่มต้นสร้างใบตรวจใหม่เพื่อบันทึกงานโครงสร้างตามมาตรฐาน ITP ครบทั้ง ${TOTAL} รายการ`}
             </p>
             <button
               onClick={newRecord}

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { WeeklyDefectSummary } from "@/lib/types";
 import UserNav from "./UserNav";
-import { BIGC_PMS } from "@/lib/auth";
+import { BIGC_PMS, isRecordOwnedByPm } from "@/lib/auth";
+import { useAuth } from "./AuthProvider";
 import {
   Wrench,
   Plus,
@@ -44,6 +45,7 @@ function fmtDate(iso: string): string {
 
 export default function WeeklyDefectList() {
   const router = useRouter();
+  const { user, role } = useAuth();
   const [rows, setRows] = useState<WeeklyDefectSummary[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,6 +62,13 @@ export default function WeeklyDefectList() {
   const [formInspDate, setFormInspDate] = useState(new Date().toISOString().slice(0, 10));
   const [formContractor, setFormContractor] = useState("");
   const [formPm, setFormPm] = useState("");
+
+  // เมื่อเปิด Modal สร้างรอบตรวจ หากเป็น PM ให้เลือกชื่อตนเองไว้ล่วงหน้า
+  useEffect(() => {
+    if (showCreateModal && role === "pm" && user?.name && !formPm) {
+      setFormPm(user.name);
+    }
+  }, [showCreateModal, role, user, formPm]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -80,17 +89,24 @@ export default function WeeklyDefectList() {
     loadData();
   }, [loadData]);
 
-  // สรุปสถิติภาพรวม
+  // กรองเฉพาะงานของ PM คนนี้ (กรณีเป็น PM) — ถ้าเป็น Admin หรือ Supervisor จะเห็นงานทั้งหมด
+  const pmScopedRows = useMemo(() => {
+    if (!rows) return null;
+    if (!user || role === "admin" || role === "supervisor") return rows;
+    return rows.filter((r) => isRecordOwnedByPm(r.pm, (r as any).createdBy, user));
+  }, [rows, user, role]);
+
+  // สรุปสถิติภาพรวม (คำนวณจากงานเฉพาะของตนเองถ้าเป็น PM)
   const stats = useMemo(() => {
-    if (!rows) return { totalRounds: 0, totalDefects: 0, open: 0, inProgress: 0, closed: 0, critical: 0, rate: 0 };
-    const totalRounds = rows.length;
+    const list = pmScopedRows || [];
+    const totalRounds = list.length;
     let totalDefects = 0;
     let open = 0;
     let inProgress = 0;
     let closed = 0;
     let critical = 0;
 
-    for (const r of rows) {
+    for (const r of list) {
       totalDefects += r.totalDefects;
       open += r.openCount;
       inProgress += r.inProgressCount;
@@ -100,19 +116,20 @@ export default function WeeklyDefectList() {
 
     const rate = totalDefects > 0 ? Math.round((closed / totalDefects) * 100) : 0;
     return { totalRounds, totalDefects, open, inProgress, closed, critical, rate };
-  }, [rows]);
+  }, [pmScopedRows]);
 
   // กรองรายการ
   const filteredRows = useMemo(() => {
-    if (!rows) return [];
-    let list = rows;
+    if (!pmScopedRows) return [];
+    let list = pmScopedRows;
 
     if (weekFilter !== "all") {
       const wNum = parseInt(weekFilter, 10);
       list = list.filter((r) => r.weekNumber === wNum);
     }
 
-    if (pmFilter !== "all") {
+    // ฟิลเตอร์ PM (เฉพาะกรณีไม่ได้เป็น PM เช่น Admin หรือ Supervisor)
+    if (role !== "pm" && pmFilter !== "all") {
       list = list.filter((r) => {
         const pmVal = (r.pm || "").toLowerCase();
         return pmVal.includes(pmFilter.toLowerCase());
@@ -135,7 +152,7 @@ export default function WeeklyDefectList() {
     }
 
     return list;
-  }, [rows, weekFilter, pmFilter, statusFilter, searchQuery]);
+  }, [pmScopedRows, weekFilter, pmFilter, statusFilter, searchQuery, role]);
 
   // สร้างรอบตรวจใหม่
   async function handleCreate(e: React.FormEvent) {
@@ -147,6 +164,7 @@ export default function WeeklyDefectList() {
 
     setIsCreating(true);
     try {
+      const pmVal = formPm.trim() || (role === "pm" && user ? user.name : "");
       const res = await fetch("/api/defects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -157,7 +175,9 @@ export default function WeeklyDefectList() {
           weekTitle: `ตรวจ Defect สัปดาห์ที่ ${formWeekNumber}`,
           inspDate: formInspDate,
           contractor: formContractor.trim(),
-          pm: formPm.trim(),
+          pm: pmVal,
+          createdBy: user?.id || "",
+          createdByName: user?.name || "",
           defects: [],
         }),
       });
@@ -330,6 +350,19 @@ export default function WeeklyDefectList() {
 
       {/* ────────── Main Content ────────── */}
       <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-6">
+        {/* แถบแจ้งเตือนสถานะเฉพาะ PM */}
+        {role === "pm" && user && (
+          <div className="mb-4 px-4 py-2.5 rounded-2xl bg-sky-500/10 border border-sky-500/25 text-xs text-sky-800 dark:text-sky-200 flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2 font-medium">
+              <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse shrink-0" />
+              <span>โหมด PM: กำลังแสดงเฉพาะรอบตรวจของ <strong>{user.name}</strong></span>
+            </div>
+            <span className="chip bg-sky-500/20 text-sky-900 dark:text-sky-100 font-bold text-[11px] shrink-0">
+              {pmScopedRows?.length || 0} รอบตรวจ
+            </span>
+          </div>
+        )}
+
         {/* แถบค้นหา & ตัวกรองสัปดาห์ */}
         <div className="card p-4 mb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -364,22 +397,28 @@ export default function WeeklyDefectList() {
                 </select>
               </div>
 
-              {/* กรอง PM */}
-              <div className="flex items-center gap-1.5 text-xs bg-sunken p-1 rounded-xl border border-line">
-                <span className="text-ink3 px-2 font-medium">PM:</span>
-                <select
-                  value={pmFilter}
-                  onChange={(e) => setPmFilter(e.target.value)}
-                  className="bg-card border border-line rounded-lg px-2.5 py-1 text-xs text-ink font-semibold max-w-[170px]"
-                >
-                  <option value="all">PM ทุกท่าน</option>
-                  {BIGC_PMS.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name} ({p.zone})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* กรอง PM: แสดงปุ่มเลือกถ้าเป็น Admin/Supervisor ถ้าเป็น PM จะแสดงชื่อตนเอง */}
+              {role === "pm" && user ? (
+                <div className="flex items-center gap-1.5 text-xs bg-sky-500/10 text-sky-800 dark:text-sky-300 px-3 py-1.5 rounded-xl border border-sky-500/20 font-bold">
+                  <span>PM: {user.name}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs bg-sunken p-1 rounded-xl border border-line">
+                  <span className="text-ink3 px-2 font-medium">PM:</span>
+                  <select
+                    value={pmFilter}
+                    onChange={(e) => setPmFilter(e.target.value)}
+                    className="bg-card border border-line rounded-lg px-2.5 py-1 text-xs text-ink font-semibold max-w-[170px]"
+                  >
+                    <option value="all">PM ทุกท่าน</option>
+                    {BIGC_PMS.map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name} ({p.zone})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* กรองสถานะ */}
               <div className="inline-flex p-1 bg-sunken rounded-xl border border-line text-xs">
@@ -435,9 +474,13 @@ export default function WeeklyDefectList() {
             <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 grid place-items-center mx-auto mb-3">
               <Wrench className="w-7 h-7" />
             </div>
-            <h3 className="font-display font-bold text-lg text-ink">ยังไม่มีรอบตรวจ Defect</h3>
+            <h3 className="font-display font-bold text-lg text-ink">
+              {role === "pm" ? `ยังไม่มีรอบตรวจ Defect ของ ${user?.name || "คุณ"}` : "ยังไม่มีรอบตรวจ Defect"}
+            </h3>
             <p className="text-ink2 text-xs sm:text-sm max-w-sm mx-auto mt-1 leading-relaxed">
-              เริ่มต้นสร้างรอบตรวจประจำสัปดาห์สำหรับไซต์งาน เพื่อเริ่มบันทึกข้อบกพร่องพร้อมรูป Before/After
+              {role === "pm"
+                ? "กดปุ่ม 'สร้างรอบตรวจใหม่' ด้านบน เพื่อเริ่มสร้างรอบตรวจ Defect ประจำสัปดาห์ของตนเอง"
+                : "เริ่มต้นสร้างรอบตรวจประจำสัปดาห์สำหรับไซต์งาน เพื่อเริ่มบันทึกข้อบกพร่องพร้อมรูป Before/After"}
             </p>
             <button
               type="button"
