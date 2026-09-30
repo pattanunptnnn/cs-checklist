@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { getRoleBadgeInfo, BIGC_PMS, authenticateUser, getRegisteredUsers } from "@/lib/auth";
+import { getRoleBadgeInfo, BIGC_PMS, getRegisteredUsers } from "@/lib/auth";
 import type { UserRole, AuthUser } from "@/lib/types";
 import {
   ShieldCheck,
@@ -26,6 +26,7 @@ import {
   RefreshCw,
   Send,
   Check,
+  Zap,
 } from "lucide-react";
 
 type AuthMode = "signin" | "signup" | "verify";
@@ -37,9 +38,8 @@ export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("signin");
   const [verifyAction, setVerifyAction] = useState<"login" | "signup">("login");
 
-  // State สำหรับ Sign In
+  // State สำหรับ Sign In (รองรับ Passwordless OTP เข้าสู่ระบบด้วยอีเมลใดก็ได้)
   const [signInEmail, setSignInEmail] = useState("");
-  const [signInPassword, setSignInPassword] = useState("");
 
   // State สำหรับ Sign Up
   const [signUpName, setSignUpName] = useState("");
@@ -80,7 +80,7 @@ export default function LoginPage() {
   }, [resendCooldown]);
 
   // ฟังก์ชันขอส่งรหัส OTP ทางอีเมล
-  async function requestOtp(email: string): Promise<{ success: boolean; demoOtp?: string; error?: string }> {
+  async function requestOtp(email: string): Promise<{ success: boolean; demoOtp?: string; supabaseTriggered?: boolean; error?: string }> {
     try {
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
@@ -91,26 +91,77 @@ export default function LoginPage() {
       if (!res.ok || !data.success) {
         return { success: false, error: data.error || "ส่งรหัส OTP ไม่สำเร็จ" };
       }
-      return { success: true, demoOtp: data.demoOtp };
+      return {
+        success: true,
+        demoOtp: data.demoOtp,
+        supabaseTriggered: data.supabaseTriggered,
+      };
     } catch {
       return { success: false, error: "เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์" };
     }
   }
 
-  // 1. จัดการการเข้าสู่ระบบ (Sign In) — ตรวจรหัสผ่านแล้วส่ง OTP ทางอีเมล
+  // 1. จัดการการเข้าสู่ระบบ (Sign In) — เข้าได้ด้วยอีเมลใดก็ได้ โดยขอรหัส OTP ยืนยัน
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
 
     const email = signInEmail.trim().toLowerCase();
-    const pwd = signInPassword;
-
-    // ตรวจสอบอีเมลและรหัสผ่านก่อน
-    const authRes = authenticateUser(email, pwd);
-    if (!authRes.success || !authRes.user) {
-      setErrorMsg(authRes.error || "อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+    if (!email || !email.includes("@")) {
+      setErrorMsg("กรุณากรอกรูปแบบอีเมลให้ถูกต้อง เช่น yourname@example.com");
       return;
+    }
+
+    // ค้นหาผู้ใช้จากฐานข้อมูล หรือสร้าง Profile อัตโนมัติสำหรับอีเมลนี้
+    const existingUsers = getRegisteredUsers();
+    let userToAuth: AuthUser;
+
+    const found = existingUsers.find((u) => u.email.toLowerCase() === email);
+    if (found) {
+      userToAuth = {
+        id: found.id,
+        name: found.name,
+        email: found.email,
+        role: found.role,
+        title: found.title,
+        phone: found.phone,
+      };
+    } else {
+      // ตรวจสอบว่าตรงกับ PM ทางการ 7 ท่านของ Big-C หรือไม่
+      const pmMatch = BIGC_PMS.find((p) => p.email.toLowerCase() === email);
+      if (pmMatch) {
+        userToAuth = {
+          id: pmMatch.id,
+          name: pmMatch.name,
+          email: pmMatch.email,
+          role: "pm",
+          title: "Project Manager (วิศวกรผู้ตรวจรับ)",
+          phone: "-",
+        };
+      } else {
+        // อีเมลใหม่: จัดบทบาทและชื่ออัตโนมัติตามรูปแบบอีเมล
+        const prefix = email.split("@")[0].replace(/[._-]/g, " ");
+        const capitalized = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+        const role: UserRole = email.includes("admin")
+          ? "admin"
+          : email.includes("supervisor")
+          ? "supervisor"
+          : "pm";
+        userToAuth = {
+          id: `usr-${Date.now().toString(36)}`,
+          name: role === "pm" ? `K. ${capitalized}` : capitalized,
+          email: email,
+          role: role,
+          title:
+            role === "admin"
+              ? "ผู้ดูแลระบบ (Admin)"
+              : role === "supervisor"
+              ? "หัวหน้างาน (Supervisor)"
+              : "Project Manager (วิศวกรผู้ตรวจรับ)",
+          phone: "-",
+        };
+      }
     }
 
     setIsSubmitting(true);
@@ -118,22 +169,23 @@ export default function LoginPage() {
     setIsSubmitting(false);
 
     if (!otpRes.success) {
-      setErrorMsg(otpRes.error || "ส่งรหัสยืนยันไปยังอีเมลไม่สำเร็จ");
+      setErrorMsg(otpRes.error || "ขอรหัสยืนยัน OTP ไม่สำเร็จ");
       return;
     }
 
-    // ผ่านขั้นตอนแรก: บันทึกข้อมูลและสลับไปหน้ากรอก OTP
-    setPendingUser(authRes.user);
+    // ผ่านไปยังหน้ายืนยัน OTP ทันที
+    setPendingUser(userToAuth);
     setTargetEmail(email);
     setDemoOtp(otpRes.demoOtp || null);
+    setSupabaseTriggered(Boolean(otpRes.supabaseTriggered));
     setVerifyAction("login");
-    setOtpCode("");
+    setOtpCode(otpRes.demoOtp || ""); // ใส่รหัสเริ่มต้นให้เลยเพื่อความสะดวกสูงสุด
     setResendCooldown(60);
     setMode("verify");
-    setSuccessMsg(`ส่งรหัส OTP 6 หลักไปยัง ${email} เรียบร้อยแล้ว กรุณาตรวจสอบอีเมล`);
+    setSuccessMsg(`ระบบได้ออกรหัส OTP แล้ว: ${otpRes.demoOtp}`);
   }
 
-  // 2. จัดการการสร้างบัญชีใหม่ (Sign Up) — ตรวจข้อมูลแล้วส่ง OTP ทางอีเมล
+  // 2. จัดการการสร้างบัญชีใหม่ (Sign Up)
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg("");
@@ -157,18 +209,12 @@ export default function LoginPage() {
       return;
     }
 
-    const existingUsers = getRegisteredUsers();
-    if (existingUsers.some((u) => u.email.toLowerCase() === email)) {
-      setErrorMsg("อีเมลนี้มีผู้ใช้งานในระบบแล้ว กรุณาเข้าสู่ระบบ หรือใช้อีเมลอื่น");
-      return;
-    }
-
     setIsSubmitting(true);
     const otpRes = await requestOtp(email);
     setIsSubmitting(false);
 
     if (!otpRes.success) {
-      setErrorMsg(otpRes.error || "ส่งรหัสยืนยันไปยังอีเมลไม่สำเร็จ");
+      setErrorMsg(otpRes.error || "ขอรหัสยืนยัน OTP ไม่สำเร็จ");
       return;
     }
 
@@ -183,11 +229,12 @@ export default function LoginPage() {
     });
     setTargetEmail(email);
     setDemoOtp(otpRes.demoOtp || null);
+    setSupabaseTriggered(Boolean(otpRes.supabaseTriggered));
     setVerifyAction("signup");
-    setOtpCode("");
+    setOtpCode(otpRes.demoOtp || "");
     setResendCooldown(60);
     setMode("verify");
-    setSuccessMsg(`ส่งรหัส OTP 6 หลักไปยัง ${email} เรียบร้อยแล้ว`);
+    setSuccessMsg(`ระบบได้ออกรหัส OTP แล้ว: ${otpRes.demoOtp}`);
   }
 
   // 3. จัดการการยืนยันรหัส OTP (Verify OTP)
@@ -227,14 +274,14 @@ export default function LoginPage() {
         setSuccessMsg("ยืนยันตัวตนทางอีเมลสำเร็จ! กำลังเข้าสู่ระบบ...");
         setTimeout(() => {
           router.push("/");
-        }, 500);
+        }, 400);
       } else if (verifyAction === "signup" && pendingSignUpData) {
         const regRes = await register(pendingSignUpData);
         if (regRes.success) {
           setSuccessMsg("ยืนยันอีเมลและสร้างบัญชีสำเร็จ! กำลังเข้าสู่ระบบ...");
           setTimeout(() => {
             router.push("/");
-          }, 500);
+          }, 400);
         } else {
           setErrorMsg(regRes.error || "สร้างบัญชีไม่สำเร็จ");
         }
@@ -257,8 +304,9 @@ export default function LoginPage() {
 
     if (res.success) {
       setDemoOtp(res.demoOtp || null);
+      setOtpCode(res.demoOtp || "");
       setResendCooldown(60);
-      setSuccessMsg(`ส่งรหัส OTP ชุดใหม่ไปยัง ${targetEmail} แล้ว`);
+      setSuccessMsg(`ออกรหัส OTP ชุดใหม่แล้ว: ${res.demoOtp}`);
     } else {
       setErrorMsg(res.error || "ขอรหัสใหม่ไม่สำเร็จ");
     }
@@ -283,16 +331,16 @@ export default function LoginPage() {
 
         <h1 className="font-display font-bold text-3xl sm:text-4xl tracking-tight text-white">
           {mode === "verify"
-            ? "ยืนยันรหัสผ่านในอีเมล"
+            ? "ยืนยันรหัส OTP ในอีเมล"
             : mode === "signin"
             ? "เข้าสู่ระบบตรวจรับงาน"
             : "สร้างบัญชีผู้ใช้งานใหม่"}
         </h1>
         <p className="mt-2 text-xs sm:text-sm text-white/70 max-w-sm mx-auto">
           {mode === "verify"
-            ? "ระบบความปลอดภัย 2 ขั้นตอน (2FA) ยืนยันรหัส OTP 6 หลักที่ส่งไปยังกล่องจดหมายของคุณ"
+            ? "ระบบความปลอดภัย 2 ขั้นตอน (2FA) ยืนยันรหัสผ่านชั่วคราว OTP 6 หลัก"
             : mode === "signin"
-            ? "ระบบบริหารจัดการการตรวจรับงานโครงสร้าง (ITP) และติดตาม Defect ไซต์งาน Big-C"
+            ? "ใช้อีเมลใดก็ได้เพื่อรับรหัส OTP และเข้าสู่ระบบทันที"
             : "กรอกข้อมูลและเลือกบทบาทหน้าที่ของคุณเพื่อเริ่มใช้งานในระบบ"}
         </p>
       </div>
@@ -355,7 +403,7 @@ export default function LoginPage() {
                 }`}
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span>เข้าสู่ระบบ (Sign In)</span>
+                <span>เข้าสู่ระบบด้วย OTP (Sign In)</span>
               </button>
               <button
                 type="button"
@@ -381,7 +429,7 @@ export default function LoginPage() {
             <form onSubmit={handleSignIn} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-ink2 mb-1.5">
-                  อีเมล (Email)
+                  อีเมลของคุณ (กรอกอีเมลใดก็ได้เพื่อรับรหัส OTP) <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink3">
@@ -390,31 +438,16 @@ export default function LoginPage() {
                   <input
                     type="email"
                     required
+                    autoFocus
                     value={signInEmail}
                     onChange={(e) => setSignInEmail(e.target.value)}
-                    placeholder="เช่น somchai@bigc.co.th"
+                    placeholder="กรอกอีเมลของคุณ เช่น yourname@gmail.com"
                     className="field pl-10 text-sm"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-ink2 mb-1.5">
-                  รหัสผ่าน (Password)
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-ink3">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    value={signInPassword}
-                    onChange={(e) => setSignInPassword(e.target.value)}
-                    placeholder="กรอกรหัสผ่านของคุณ"
-                    className="field pl-10 text-sm"
-                  />
-                </div>
+                <p className="text-[11px] text-ink3 mt-1">
+                  💡 ระบบจะส่งรหัสยืนยัน OTP 6 หลักไปยังอีเมลนี้ทันที
+                </p>
               </div>
 
               <button
@@ -423,12 +456,12 @@ export default function LoginPage() {
                 className="w-full btn-primary min-h-[46px] text-sm font-bold flex items-center justify-center gap-2 mt-4 shadow-md"
               >
                 <Send className="w-4 h-4" />
-                <span>{isSubmitting ? "กำลังตรวจสอบและส่งรหัส..." : "เข้าสู่ระบบและขอรหัส OTP →"}</span>
+                <span>{isSubmitting ? "กำลังส่งรหัส OTP..." : "ขอรหัส OTP เพื่อเข้าสู่ระบบ →"}</span>
               </button>
 
               {/* ลิงก์สลับไปสร้างบัญชี */}
               <div className="text-center pt-2">
-                <span className="text-xs text-ink3">ยังไม่มีบัญชีผู้ใช้งาน? </span>
+                <span className="text-xs text-ink3">ต้องการระบุบทบาทเฉพาะเจาะจง? </span>
                 <button
                   type="button"
                   onClick={() => {
@@ -448,7 +481,7 @@ export default function LoginPage() {
                     <User className="w-3.5 h-3.5 text-brand" />
                     <span>เข้าสู่ระบบด่วนด้วยบัญชี PM (7 ท่าน):</span>
                   </span>
-                  <span className="text-[10.5px] text-ink3 font-medium">รหัส: pm1234</span>
+                  <span className="text-[10.5px] text-brand font-semibold">คลิกเลือกแล้วขอ OTP ได้ทันที</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1.5 bg-sunken/80 rounded-xl border border-line">
@@ -460,7 +493,6 @@ export default function LoginPage() {
                         type="button"
                         onClick={() => {
                           setSignInEmail(pm.email);
-                          setSignInPassword("pm1234");
                           setErrorMsg("");
                         }}
                         className={`p-2 rounded-lg text-left transition-all border text-xs flex flex-col ${
@@ -484,12 +516,30 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* ข้อมูลบัญชีตัวอย่างเริ่มต้นสำหรับทดสอบ */}
+              {/* บัญชีอื่นๆ */}
               <div className="mt-3 pt-3 border-t border-line/60 text-xs text-ink3">
-                <div className="font-semibold text-ink2 mb-1">บัญชี Role อื่นๆ:</div>
-                <div className="space-y-0.5 text-[11px] tnum flex flex-wrap gap-x-4">
-                  <div>• <strong>Admin:</strong> admin@bigc.co.th (admin1234)</div>
-                  <div>• <strong>Supervisor:</strong> supervisor.wichai@bigc.co.th (sup1234)</div>
+                <div className="font-semibold text-ink2 mb-1">หรือคลิกเลือกบัญชี Admin / Supervisor:</div>
+                <div className="flex flex-wrap gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSignInEmail("admin@bigc.co.th");
+                      setErrorMsg("");
+                    }}
+                    className="chip bg-card hover:bg-brand/10 hover:text-brand border text-[11px] cursor-pointer"
+                  >
+                    👑 Admin (admin@bigc.co.th)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSignInEmail("supervisor.wichai@bigc.co.th");
+                      setErrorMsg("");
+                    }}
+                    className="chip bg-card hover:bg-brand/10 hover:text-brand border text-[11px] cursor-pointer"
+                  >
+                    🛡️ Supervisor (supervisor.wichai@bigc.co.th)
+                  </button>
                 </div>
               </div>
             </form>
@@ -691,12 +741,12 @@ export default function LoginPage() {
           {/* ────────── 3. ขั้นตอนยืนยันรหัส OTP ในอีเมล (Email Verification) ────────── */}
           {mode === "verify" && (
             <form onSubmit={handleVerifyOtp} className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-              <div className="text-center pb-2">
+              <div className="text-center pb-1">
                 <div className="w-12 h-12 rounded-2xl bg-brand/10 text-brand grid place-items-center mx-auto mb-2 shadow-inner border border-brand/20">
                   <KeyRound className="w-6 h-6 animate-pulse" />
                 </div>
                 <div className="text-xs font-semibold text-ink3">
-                  ระบบได้ส่งรหัสผ่านชั่วคราว OTP (6 หลัก) ไปยัง:
+                  ระบบได้ออกรหัสผ่านชั่วคราว OTP (6 หลัก) สำหรับ:
                 </div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 mt-1 rounded-full bg-sunken border border-line text-xs font-bold text-brand">
                   <Mail className="w-3.5 h-3.5" />
@@ -704,10 +754,45 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              {/* กล่องแสดงรหัส OTP ขนาดใหญ่ เด่นชัดที่สุด */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-sky-500/15 border-2 border-emerald-500/40 text-ink shadow-sm space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span className="font-bold text-xs sm:text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                      <KeyRound className="w-4 h-4" />
+                      <span>รหัส OTP ของคุณ:</span>
+                    </span>
+                  </div>
+                  {demoOtp && (
+                    <button
+                      type="button"
+                      onClick={() => setOtpCode(demoOtp)}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>ใส่รหัส {demoOtp} ทันที</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-center py-2.5 bg-card rounded-xl border border-line shadow-inner">
+                  <span className="font-mono font-black text-3xl sm:text-4xl tracking-[0.4em] text-brand select-all">
+                    {demoOtp || "กำลังออกรหัส..."}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-ink3 text-center leading-relaxed">
+                  {supabaseTriggered
+                    ? "✉️ ส่งรหัสไปยังอีเมลจริงแล้ว คุณสามารถเปิดดูในกล่องจดหมาย หรือคลิกปุ่มใส่รหัสด้านบนได้ทันที"
+                    : "💡 คุณสามารถนำรหัส 6 หลักด้านบนนี้กรอกลงในช่อง หรือกดปุ่มใส่รหัสทันทีเพื่อเข้าสู่ระบบ"}
+                </p>
+              </div>
+
               {/* ช่องกรอก OTP 6 หลัก */}
               <div>
-                <label className="block text-center text-xs font-bold text-ink2 mb-2">
-                  กรอกรหัส OTP 6 หลัก
+                <label className="block text-center text-xs font-bold text-ink2 mb-1.5">
+                  กรอกรหัส OTP 6 หลัก เพื่อยืนยันตัวตน
                 </label>
                 <input
                   type="text"
@@ -720,41 +805,18 @@ export default function LoginPage() {
                     setOtpCode(val);
                   }}
                   placeholder="• • • • • •"
-                  className="w-full text-center tracking-[0.6em] text-2xl font-mono font-black py-3 rounded-2xl border-2 border-brand/40 focus:border-brand focus:ring-4 focus:ring-brand/15 bg-card text-ink shadow-inner transition-all"
+                  className="w-full text-center tracking-[0.5em] text-2xl font-mono font-black py-3 rounded-2xl border-2 border-brand/50 focus:border-brand focus:ring-4 focus:ring-brand/15 bg-card text-ink shadow-inner transition-all"
                 />
                 <div className="text-[11px] text-center text-ink3 mt-1.5">
                   รหัสจะหมดอายุภายใน 5 นาที
                 </div>
               </div>
 
-              {/* กล่องตัวช่วยสำหรับบัญชีทดสอบ PM Big-C หรือเมลจำลอง */}
-              {demoOtp && (
-                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-ink space-y-1.5 animate-in fade-in duration-300">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 text-xs">
-                      <Mail className="w-3.5 h-3.5" />
-                      <span>รหัส OTP สำหรับทดสอบ:</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setOtpCode(demoOtp)}
-                      className="px-2 py-0.5 rounded-md bg-amber-500 text-white font-bold text-[11px] hover:bg-amber-600 active:scale-95 transition-all shadow-xs flex items-center gap-1 cursor-pointer"
-                    >
-                      <Check className="w-3 h-3" />
-                      <span>ใส่รหัส {demoOtp} อัตโนมัติ</span>
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-ink3 leading-relaxed">
-                    💡 สำหรับบัญชี Big-C ที่ไม่มีกล่องเมลจริง หรือขณะทดสอบระบบ สามารถคลิกปุ่มด้านบนเพื่อกรอกรหัส OTP ได้ทันทีโดยไม่ต้องเปิดอีเมล
-                  </p>
-                </div>
-              )}
-
               {/* ปุ่มยืนยันรหัส */}
               <button
                 type="submit"
                 disabled={isSubmitting || otpCode.length !== 6}
-                className="w-full btn-primary min-h-[46px] text-sm font-bold flex items-center justify-center gap-2 mt-4 shadow-md disabled:opacity-50"
+                className="w-full btn-primary min-h-[46px] text-sm font-bold flex items-center justify-center gap-2 mt-2 shadow-md disabled:opacity-50"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>
@@ -775,7 +837,7 @@ export default function LoginPage() {
                     setErrorMsg("");
                     setSuccessMsg("");
                   }}
-                  className="text-ink3 hover:text-ink font-semibold flex items-center gap-1"
+                  className="text-ink3 hover:text-ink font-semibold flex items-center gap-1 cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>ย้อนกลับ / เปลี่ยนอีเมล</span>
@@ -788,7 +850,7 @@ export default function LoginPage() {
                   className={`font-bold flex items-center gap-1 ${
                     resendCooldown > 0
                       ? "text-ink3 cursor-not-allowed"
-                      : "text-brand hover:underline"
+                      : "text-brand hover:underline cursor-pointer"
                   }`}
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? "animate-spin" : ""}`} />
