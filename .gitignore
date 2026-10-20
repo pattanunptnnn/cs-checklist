@@ -4,6 +4,8 @@ out
 data/records/*.json
 data/defects/*.json
 data/otps.json
+data/users.json
+data/login_logs.json
 uploads/*
 !uploads/.gitkeep
 npm-debug.log*

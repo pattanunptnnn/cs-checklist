@@ -262,3 +262,23 @@ export interface AuthUser {
   phone?: string;
 }
 
+export interface UserRecord extends AuthUser {
+  password?: string;
+  lastLoginAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LoginLog {
+  id: string;
+  userId?: string | null;
+  email: string;
+  name?: string;
+  role?: string;
+  status: "success" | "failed";
+  ipAddress?: string;
+  userAgent?: string;
+  loggedInAt: string;
+  createdAt?: string;
+}
+

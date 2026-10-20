@@ -69,14 +69,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const term = email.trim().toLowerCase();
     const pwd = password || "";
 
-    const res = authenticateUser(term, pwd);
-    if (!res.success || !res.user) {
-      return { success: false, error: res.error || "เข้าสู่ระบบไม่สำเร็จ" };
-    }
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: term, password: pwd }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.user) {
+        return { success: false, error: data.error || "เข้าสู่ระบบไม่สำเร็จ" };
+      }
 
-    setUser(res.user);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(res.user));
-    return { success: true };
+      setUser(data.user);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
+      return { success: true };
+    } catch {
+      // เผื่อกรณีออฟไลน์ ใช้ระบบ Local Auth เป็น Fallback
+      const res = authenticateUser(term, pwd);
+      if (!res.success || !res.user) {
+        return { success: false, error: res.error || "เข้าสู่ระบบไม่สำเร็จ" };
+      }
+      setUser(res.user);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(res.user));
+      return { success: true };
+    }
   }, []);
 
   const register = useCallback(
@@ -88,14 +104,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       title?: string;
       phone?: string;
     }) => {
-      const res = registerUser(data);
-      if (!res.success || !res.user) {
-        return { success: false, error: res.error || "สร้างบัญชีไม่สำเร็จ" };
-      }
+      try {
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        const resp = await res.json();
+        if (!res.ok || !resp.success || !resp.user) {
+          return { success: false, error: resp.error || "สร้างบัญชีไม่สำเร็จ" };
+        }
 
-      setUser(res.user);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(res.user));
-      return { success: true };
+        setUser(resp.user);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(resp.user));
+        return { success: true };
+      } catch {
+        // เผื่อกรณีออฟไลน์ ใช้ระบบ Local Auth เป็น Fallback
+        const res = registerUser(data);
+        if (!res.success || !res.user) {
+          return { success: false, error: res.error || "สร้างบัญชีไม่สำเร็จ" };
+        }
+        setUser(res.user);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(res.user));
+        return { success: true };
+      }
     },
     []
   );
