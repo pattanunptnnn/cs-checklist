@@ -7,12 +7,22 @@ import path from "path";
 import crypto from "crypto";
 import type { AuthUser, UserRecord, LoginLog, UserRole } from "./types";
 import { getSupabase } from "./supabase";
+import { BIGC_PMS } from "./auth";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+// ตรวจสอบ Serverless / Vercel Environment
+const isVercel = Boolean(
+  process.env.VERCEL ||
+  process.env.NOW_REGION ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.NODE_ENV === "production" && !process.env.LOCAL_DEV
+);
+
+// บน Vercel ให้เขียนไฟล์ลง /tmp เท่านั้น เพื่อไม่ให้ติดสิทธิ์ Read-only filesystem
+const DATA_DIR = isVercel ? path.join("/tmp", "cs_data") : path.join(process.cwd(), "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const LOGS_FILE = path.join(DATA_DIR, "login_logs.json");
 
-// บัญชีเริ่มต้นสำหรับทดสอบระบบ
+// สร้างบัญชีเริ่มต้นสำหรับ Admin, Supervisor และ PM ทั้ง 7 ท่าน
 export const DEFAULT_USERS: UserRecord[] = [
   {
     id: "usr-admin-01",
@@ -34,64 +44,91 @@ export const DEFAULT_USERS: UserRecord[] = [
     phone: "089-123-4567",
     createdAt: new Date().toISOString(),
   },
+  ...BIGC_PMS.map((pm) => ({
+    id: pm.id,
+    email: pm.email || `${pm.name.replace(/^k\.\s*/i, "").toLowerCase().replace(/\s+/g, "")}@bigc.co.th`,
+    password: "pm1234",
+    name: pm.name,
+    role: "pm" as UserRole,
+    title: `Project Manager (${pm.zone})`,
+    phone: pm.phone || "081-xxx-xxxx",
+    createdAt: new Date().toISOString(),
+  })),
 ];
 
+// In-memory cache ป้องกัน File I/O Error บน Serverless
+let memoryUsers: UserRecord[] = [...DEFAULT_USERS];
+let memoryLogs: LoginLog[] = [];
+
 async function ensureDir() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+  } catch {
+    // ป้องกัน error บนสภาพแวดล้อม read-only
+  }
 }
 
 // ------------------------------------------------------------
-// Local File Helpers
+// Local File Helpers (Safe with try/catch)
 // ------------------------------------------------------------
 async function readLocalUsers(): Promise<UserRecord[]> {
-  await ensureDir();
   try {
+    await ensureDir();
     const raw = await fs.readFile(USERS_FILE, "utf-8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
+      memoryUsers = parsed;
       return parsed;
     }
   } catch {
     // ignore
   }
-  await writeLocalUsers(DEFAULT_USERS);
-  return DEFAULT_USERS;
+  return memoryUsers;
 }
 
 async function writeLocalUsers(users: UserRecord[]): Promise<void> {
-  await ensureDir();
-  await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
+  memoryUsers = users;
+  try {
+    await ensureDir();
+    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), "utf-8");
+  } catch {
+    // ignore
+  }
 }
 
 async function readLocalLogs(): Promise<LoginLog[]> {
-  await ensureDir();
   try {
+    await ensureDir();
     const raw = await fs.readFile(LOGS_FILE, "utf-8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
+      memoryLogs = parsed;
       return parsed;
     }
   } catch {
     // ignore
   }
-  return [];
+  return memoryLogs;
 }
 
 async function appendLocalLog(log: LoginLog): Promise<void> {
-  await ensureDir();
-  const logs = await readLocalLogs();
-  logs.unshift(log);
-  // เก็บประวัติสูงสุด 1,000 รายการในไฟล์สำรอง
-  const trimmed = logs.slice(0, 1000);
-  await fs.writeFile(LOGS_FILE, JSON.stringify(trimmed, null, 2), "utf-8");
+  memoryLogs.unshift(log);
+  memoryLogs = memoryLogs.slice(0, 1000);
+  try {
+    await ensureDir();
+    await fs.writeFile(LOGS_FILE, JSON.stringify(memoryLogs, null, 2), "utf-8");
+  } catch {
+    // ignore
+  }
 }
 
 // ------------------------------------------------------------
-// 1. อ่านรายชื่อผู้ใช้ทั้งหมด
+// 1. อ่านรายชื่อผู้ใช้ทั้งหมด (Supabase Cloud + System Record Backup)
 // ------------------------------------------------------------
 export async function listUsers(): Promise<UserRecord[]> {
   const supabase = getSupabase();
   if (supabase) {
+    // 1.1 ลองอ่านจากตาราง public.users ใน Supabase โดยตรง
     try {
       const { data, error } = await supabase
         .from("users")
@@ -99,7 +136,7 @@ export async function listUsers(): Promise<UserRecord[]> {
         .order("created_at", { ascending: false });
 
       if (!error && data && data.length > 0) {
-        return data.map((row: any) => ({
+        const mapped: UserRecord[] = data.map((row: any) => ({
           id: row.id,
           email: row.email,
           name: row.name,
@@ -111,52 +148,58 @@ export async function listUsers(): Promise<UserRecord[]> {
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         }));
+        memoryUsers = mapped;
+        return mapped;
       }
-    } catch (e) {
-      console.warn("Supabase listUsers failed, falling back to local:", e);
+    } catch {
+      // ตาราง users อาจยังไม่ได้สร้าง
+    }
+
+    // 1.2 หากยังไม่มีตาราง users ให้อ่านจากตาราง inspection_records (system_auth_users)
+    try {
+      const { data, error } = await supabase
+        .from("inspection_records")
+        .select("*")
+        .eq("id", "system_auth_users")
+        .maybeSingle();
+
+      if (!error && data && data.items && Array.isArray(data.items.users) && data.items.users.length > 0) {
+        memoryUsers = data.items.users;
+        return data.items.users;
+      }
+    } catch {
+      // ignore
     }
   }
+
   return await readLocalUsers();
 }
 
 // ------------------------------------------------------------
-// 2. ค้นหาผู้ใช้ตามอีเมล
+// 2. ค้นหาผู้ใช้ตามอีเมล หรือชื่อ (Case-insensitive)
 // ------------------------------------------------------------
-export async function findUserByEmail(email: string): Promise<UserRecord | null> {
-  const normalized = email.trim().toLowerCase();
-  const supabase = getSupabase();
+export async function findUserByEmail(emailOrName: string): Promise<UserRecord | null> {
+  const normalized = emailOrName.trim().toLowerCase();
+  const allUsers = await listUsers();
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .ilike("email", normalized)
-        .limit(1)
-        .maybeSingle();
+  const found = allUsers.find(
+    (u) =>
+      u.email.toLowerCase() === normalized ||
+      u.name.toLowerCase() === normalized ||
+      u.name.toLowerCase().replace(/^k\.\s*/i, "").trim() === normalized.replace(/^k\.\s*/i, "").trim()
+  );
 
-      if (!error && data) {
-        return {
-          id: data.id,
-          email: data.email,
-          name: data.name,
-          role: data.role as UserRole,
-          title: data.title || "",
-          phone: data.phone || "",
-          password: data.password,
-          lastLoginAt: data.last_login_at,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        };
-      }
-    } catch {
-      // fallback
-    }
-  }
+  if (found) return found;
 
-  const local = await readLocalUsers();
-  const found = local.find((u) => u.email.toLowerCase() === normalized);
-  return found || null;
+  // ตรวจสอบกับ DEFAULT_USERS เพิ่มเติม
+  const def = DEFAULT_USERS.find(
+    (u) =>
+      u.email.toLowerCase() === normalized ||
+      u.name.toLowerCase() === normalized ||
+      u.name.toLowerCase().replace(/^k\.\s*/i, "").trim() === normalized.replace(/^k\.\s*/i, "").trim()
+  );
+
+  return def || null;
 }
 
 // ------------------------------------------------------------
@@ -170,9 +213,9 @@ export async function createUser(data: {
   title?: string;
   phone?: string;
 }): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
-  const normalized = data.email.trim().toLowerCase();
+  const normalizedEmail = data.email.trim().toLowerCase();
 
-  const existing = await findUserByEmail(normalized);
+  const existing = await findUserByEmail(normalizedEmail);
   if (existing) {
     return { success: false, error: "อีเมลนี้มีผู้ใช้งานในระบบแล้ว กรุณาเข้าสู่ระบบ หรือใช้อีเมลอื่น" };
   }
@@ -189,7 +232,7 @@ export async function createUser(data: {
 
   const newRecord: UserRecord = {
     id,
-    email: normalized,
+    email: normalizedEmail,
     name: data.name.trim(),
     password: data.password,
     role: data.role,
@@ -200,9 +243,13 @@ export async function createUser(data: {
     updatedAt: now,
   };
 
-  // 1. บันทึกลง Supabase Database
+  const allUsers = await listUsers();
+  const updatedUsers = [newRecord, ...allUsers.filter((u) => u.email.toLowerCase() !== normalizedEmail)];
+
+  // บันทึกลง Supabase
   const supabase = getSupabase();
   if (supabase) {
+    // บันทึกลงตาราง users (ถ้ามี)
     try {
       await supabase.from("users").upsert({
         id: newRecord.id,
@@ -216,15 +263,25 @@ export async function createUser(data: {
         created_at: newRecord.createdAt,
         updated_at: newRecord.updatedAt,
       });
+    } catch {
+      // ignore
+    }
+
+    // บันทึกลง inspection_records system_auth_users เสมอ เพื่อให้ sync บน cloud ได้ 100%
+    try {
+      await supabase.from("inspection_records").upsert({
+        id: "system_auth_users",
+        project: { name: "system_auth_storage", updatedAt: now },
+        items: { users: updatedUsers },
+        saved_at: now,
+      });
     } catch (e) {
-      console.warn("Supabase createUser error, falling back to local file:", e);
+      console.warn("Supabase system_auth_users upsert warning:", e);
     }
   }
 
-  // 2. บันทึกลง Local JSON File สำรอง
-  const local = await readLocalUsers();
-  local.push(newRecord);
-  await writeLocalUsers(local);
+  // บันทึก Local / In-memory
+  await writeLocalUsers(updatedUsers);
 
   const authUser: AuthUser = {
     id: newRecord.id,
@@ -266,7 +323,7 @@ export async function recordLoginLog(logData: {
     createdAt: now,
   };
 
-  // 1. บันทึกลง Supabase Database
+  // 1. บันทึกลง Supabase
   const supabase = getSupabase();
   if (supabase) {
     try {
@@ -282,11 +339,25 @@ export async function recordLoginLog(logData: {
         logged_in_at: logEntry.loggedInAt,
         created_at: logEntry.createdAt,
       });
-    } catch (e) {
-      console.warn("Supabase login_logs insert error (table may not be created yet):", e);
+    } catch {
+      // ignore
     }
 
-    // อัปเดต last_login_at ของผู้ใช้ใน Supabase
+    // บันทึกลง system_auth_login_logs สำรอง
+    try {
+      const currentLogs = await listLoginLogs(50);
+      const updatedLogs = [logEntry, ...currentLogs.filter((l) => l.id !== logEntry.id)].slice(0, 100);
+      await supabase.from("inspection_records").upsert({
+        id: "system_auth_login_logs",
+        project: { name: "system_auth_login_logs", updatedAt: now },
+        items: { logs: updatedLogs },
+        saved_at: now,
+      });
+    } catch {
+      // ignore
+    }
+
+    // อัปเดต last_login_at ของผู้ใช้
     if (logData.status === "success" && logData.userId) {
       try {
         await supabase
@@ -299,23 +370,8 @@ export async function recordLoginLog(logData: {
     }
   }
 
-  // 2. บันทึกลง Local JSON File สำรอง
+  // 2. บันทึก Local File & Memory
   await appendLocalLog(logEntry);
-
-  // อัปเดต last_login_at ของผู้ใช้ใน Local
-  if (logData.status === "success") {
-    try {
-      const local = await readLocalUsers();
-      const idx = local.findIndex((u) => u.email.toLowerCase() === logEntry.email);
-      if (idx !== -1) {
-        local[idx].lastLoginAt = now;
-        local[idx].updatedAt = now;
-        await writeLocalUsers(local);
-      }
-    } catch {
-      // ignore
-    }
-  }
 
   return logEntry;
 }
@@ -326,6 +382,7 @@ export async function recordLoginLog(logData: {
 export async function listLoginLogs(limit = 50): Promise<LoginLog[]> {
   const supabase = getSupabase();
   if (supabase) {
+    // 5.1 ลองอ่านจาก public.login_logs ก่อน
     try {
       const { data, error } = await supabase
         .from("login_logs")
@@ -348,7 +405,22 @@ export async function listLoginLogs(limit = 50): Promise<LoginLog[]> {
         }));
       }
     } catch {
-      // fallback
+      // ignore
+    }
+
+    // 5.2 ถ้าไม่มีตาราง login_logs ให้อ่านจาก system_auth_login_logs
+    try {
+      const { data, error } = await supabase
+        .from("inspection_records")
+        .select("*")
+        .eq("id", "system_auth_login_logs")
+        .maybeSingle();
+
+      if (!error && data && data.items && Array.isArray(data.items.logs) && data.items.logs.length > 0) {
+        return data.items.logs.slice(0, limit);
+      }
+    } catch {
+      // ignore
     }
   }
 

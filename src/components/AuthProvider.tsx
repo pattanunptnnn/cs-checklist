@@ -77,6 +77,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
       if (!res.ok || !data.success || !data.user) {
+        // ตรวจสอบกับ Local Storage / Registered Users เผื่อสร้างไว้ในเครื่อง
+        const localRes = authenticateUser(term, pwd);
+        if (localRes.success && localRes.user) {
+          setUser(localRes.user);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(localRes.user));
+          // แอบ sync ขึ้น server ให้ใน background
+          fetch("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: localRes.user.name,
+              email: localRes.user.email,
+              password: pwd,
+              role: localRes.user.role,
+              title: localRes.user.title,
+              phone: localRes.user.phone,
+            }),
+          }).catch(() => {});
+          return { success: true };
+        }
         return { success: false, error: data.error || "เข้าสู่ระบบไม่สำเร็จ" };
       }
 

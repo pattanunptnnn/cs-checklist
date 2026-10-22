@@ -46,7 +46,8 @@ export async function listRecords(): Promise<RecordSummary[]> {
         .order("created_at", { ascending: false });
 
       if (!error && data && data.length > 0) {
-        return data.map((row: any) => {
+        const validRows = data.filter((row: any) => row.id && !String(row.id).startsWith("system_"));
+        return validRows.map((row: any) => {
           const rec: InspectionRecord = {
             id: row.id,
             project: row.project || {},
@@ -111,6 +112,7 @@ export async function listRecords(): Promise<RecordSummary[]> {
 // 2. อ่านข้อมูลใบตรวจ 1 ใบ
 // ------------------------------------------------------------
 export async function getRecord(id: string): Promise<InspectionRecord | null> {
+  if (String(id).startsWith("system_")) return null;
   const supabase = getSupabase();
 
   if (supabase) {
