@@ -2424,6 +2424,134 @@
           ]
         }
       ]
+    },
+    {
+      "id": "greasetrap",
+      "code": "GT",
+      "name": "ถังบำบัดและดักไขมันใต้ดิน (Underground Grease Trap Tank)",
+      "optional": false,
+      "desc": "Grease Trap Tank Inspection Sheet (Underground Tank) · ตรวจขนาดท่อ สโลป เสาเข็ม ระดับท่ออ้างอิง Sale และข้อต่อ Flexible",
+      "blocks": [
+        {
+          "title": "รายการตรวจถังดักไขมัน/ถังบำบัดน้ำเสียใต้ดิน (Grease Trap Tank Inspection)",
+          "hold": true,
+          "photo": "ถ่ายรูปติดตั้งหน้างานจริง + แนบภาพท่อน้ำเสียเข้า/ออก/ข้อต่อ Flexible/ระดับท่อ",
+          "items": [
+            {
+              "no": 1,
+              "name": "ขนาดท่อน้ำเสียเข้า",
+              "crit": "ขนาดตรงตามแบบ Dia 4\", สโลป 1:100 (BOP -450), ระดับท่อตรงตามแบบอ้างอิง Sale",
+              "tool": "ตลับเมตร / แบบก่อสร้างอ้างอิง",
+              "hold": true,
+              "measure": true,
+              "pipeLevelReq": true,
+              "design": "Dia 4\"",
+              "unit": "นิ้ว",
+              "ctype": "ขนาด & สโลป",
+              "cls": "วิกฤต",
+              "pt": "H",
+              "cov": "100%",
+              "photoReq": true
+            },
+            {
+              "no": 2,
+              "name": "ขนาดท่อน้ำเสียออก",
+              "crit": "ขนาดตรงตามแบบ Dia 4\", สโลปไหลลงบ่อระบายน้ำโครงการ (To Site Drainage), ระดับท่อตรงตามแบบอ้างอิง Sale",
+              "tool": "ตลับเมตร / แบบก่อสร้างอ้างอิง",
+              "hold": true,
+              "measure": true,
+              "pipeLevelReq": true,
+              "design": "Dia 4\"",
+              "unit": "นิ้ว",
+              "ctype": "ขนาด & แนวท่อ",
+              "cls": "วิกฤต",
+              "pt": "H",
+              "cov": "100%",
+              "photoReq": true
+            },
+            {
+              "no": 3,
+              "name": "ขนาดท่ออากาศ",
+              "crit": "ขนาดตรงตามแบบ Dia 2\", เดินท่อระบายอากาศ (Vent) ขึ้นสู่จุดระบายตามแบบ ไม่กีดขวาง",
+              "tool": "ตลับเมตร / แบบก่อสร้างอ้างอิง",
+              "hold": false,
+              "measure": true,
+              "pipeLevelReq": true,
+              "design": "Dia 2\"",
+              "unit": "นิ้ว",
+              "ctype": "ขนาดท่อ",
+              "cls": "สำคัญ",
+              "pt": "R",
+              "cov": "100%",
+              "photoReq": true
+            },
+            {
+              "no": 4,
+              "name": "ขนาด Floor Clean-Out ปลายท่อน้ำเสียเข้า",
+              "crit": "ขนาดตรงตามแบบ Dia 4\", ติดตั้งจุดล้างท่อ Clean-Out ปลายท่อน้ำเสียเข้า พร้อมฝาปิดสนิทเสมอระดับพื้น",
+              "tool": "ตลับเมตร / ตรวจพินิจ",
+              "hold": false,
+              "measure": true,
+              "pipeLevelReq": true,
+              "design": "Dia 4\"",
+              "unit": "นิ้ว",
+              "ctype": "อุปกรณ์สุขาภิบาล",
+              "cls": "สำคัญ",
+              "pt": "R",
+              "cov": "100%",
+              "photoReq": true
+            },
+            {
+              "no": 5,
+              "name": "จำนวนเข็มที่รับน้ำหนักใต้ดิน",
+              "crit": "ติดตั้งเสาเข็มรับน้ำหนักใต้ดินครบ 6 ต้น ขนาด Dia 0.15 ม. ความยาว 3 ม. (Concrete Foundation Pump and Water Tank)",
+              "tool": "ตลับเมตร / ตรวจผังเข็มและนับจำนวนจริง",
+              "hold": true,
+              "measure": true,
+              "pipeLevelReq": true,
+              "design": "6x Dia 0.15 @3M.",
+              "unit": "ต้น",
+              "ctype": "เสาเข็มฐานราก",
+              "cls": "วิกฤต",
+              "pt": "H",
+              "cov": "100%",
+              "photoReq": true
+            },
+            {
+              "no": 6,
+              "name": "ขนาด Flexible ท่อน้ำเสีย ก่อนเข้า และออก",
+              "crit": "ติดตั้งข้อต่อยืดหยุ่น (Flexible Joint) ขนาด Dia 4\" ทั้งก่อนเข้าและออกจากถัง ป้องกันท่อแตกหักจากการทรุดตัว",
+              "tool": "ตลับเมตร / ตรวจพินิจ",
+              "hold": true,
+              "measure": true,
+              "pipeLevelReq": true,
+              "design": "Dia 4\"",
+              "unit": "นิ้ว",
+              "ctype": "ข้อต่อกันทรุด",
+              "cls": "วิกฤต",
+              "pt": "H",
+              "cov": "100%",
+              "photoReq": true
+            },
+            {
+              "no": 7,
+              "name": "ขนาด Flexible ท่ออากาศ",
+              "crit": "ติดตั้งข้อต่อยืดหยุ่น (Flexible Joint) ขนาด Dia 2\" ที่ท่อระบายอากาศ ป้องกันการฉีกขาดจากการขยับตัว",
+              "tool": "ตลับเมตร / ตรวจพินิจ",
+              "hold": false,
+              "measure": true,
+              "pipeLevelReq": true,
+              "design": "Dia 2\"",
+              "unit": "นิ้ว",
+              "ctype": "ข้อต่อกันทรุด",
+              "cls": "สำคัญ",
+              "pt": "R",
+              "cov": "100%",
+              "photoReq": true
+            }
+          ]
+        }
+      ]
     }
   ],
   "tests": {

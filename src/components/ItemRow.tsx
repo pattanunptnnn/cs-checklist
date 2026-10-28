@@ -138,25 +138,74 @@ function ItemRow({
         {/* ── ค่าที่วัดได้ ── */}
         {item.measure && (
           <div className="mt-3 bg-card/50 p-2.5 rounded-xl border border-line/60">
-            <label className="block text-[12px] font-semibold text-ink2 mb-1.5">
-              ค่าที่วัดได้จริง
-              {item.design && <span className="font-normal text-ink3 ml-1">· ค่าออกแบบตามสเปก: <strong className="text-ink2">{item.design}</strong></span>}
-            </label>
-            <div className="relative">
-              <input
-                id={`actual-${itemKey}`}
-                value={r.actual || ""}
-                onChange={(e) => onChange(itemKey, { actual: e.target.value })}
-                placeholder="กรอกค่าตัวเลข เช่น 182 / 185 / 179"
-                inputMode="decimal"
-                className={"field tnum font-medium" + (item.unit ? " pr-14" : "")}
-              />
-              {item.unit && (
-                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[12.5px] font-bold text-ink3 pointer-events-none bg-sunken px-1.5 py-0.5 rounded">
-                  {item.unit}
-                </span>
-              )}
-            </div>
+            {item.pipeLevelReq ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[12px] font-semibold text-ink2 mb-1.5">
+                    ขนาดที่ตรวจสอบจริง
+                    {item.design && (
+                      <span className="font-normal text-ink3 ml-1">
+                        · ออกแบบ: <strong className="text-ink2">{item.design}</strong>
+                      </span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <input
+                      id={`actual-${itemKey}`}
+                      value={r.actual || ""}
+                      onChange={(e) => onChange(itemKey, { actual: e.target.value })}
+                      placeholder={item.design ? `เช่น ${item.design}` : "กรอกขนาดที่ตรวจสอบจริง"}
+                      className={"field font-medium" + (item.unit ? " pr-14" : "")}
+                    />
+                    {item.unit && (
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[12.5px] font-bold text-ink3 pointer-events-none bg-sunken px-1.5 py-0.5 rounded">
+                        {item.unit}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[12px] font-semibold text-ink2 mb-1.5">
+                    ระดับท่อ อ้างอิงจาก Sale
+                    <span className="font-normal text-ink3 ml-1">(เช่น BOP -450 / SL -400)</span>
+                  </label>
+                  <input
+                    id={`pipe-level-${itemKey}`}
+                    value={r.pipeLevel || ""}
+                    onChange={(e) => onChange(itemKey, { pipeLevel: e.target.value })}
+                    placeholder="ระบุระดับท่อ เช่น BOP -450..."
+                    className="field font-medium"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-[12px] font-semibold text-ink2 mb-1.5">
+                  ค่าที่วัดได้จริง
+                  {item.design && (
+                    <span className="font-normal text-ink3 ml-1">
+                      · ค่าออกแบบตามสเปก: <strong className="text-ink2">{item.design}</strong>
+                    </span>
+                  )}
+                </label>
+                <div className="relative">
+                  <input
+                    id={`actual-${itemKey}`}
+                    value={r.actual || ""}
+                    onChange={(e) => onChange(itemKey, { actual: e.target.value })}
+                    placeholder="กรอกค่าตัวเลข เช่น 182 / 185 / 179"
+                    inputMode="decimal"
+                    className={"field tnum font-medium" + (item.unit ? " pr-14" : "")}
+                  />
+                  {item.unit && (
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[12.5px] font-bold text-ink3 pointer-events-none bg-sunken px-1.5 py-0.5 rounded">
+                      {item.unit}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

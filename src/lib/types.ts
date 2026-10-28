@@ -20,6 +20,7 @@ export interface ChecklistItem {
   photoReq?: boolean; // ต้องมีรูปหรือไม่
   design?: string;    // ค่าออกแบบ (สำหรับรายการทดสอบ)
   unit?: string;      // หน่วย (สำหรับรายการทดสอบ)
+  pipeLevelReq?: boolean; // ระดับท่อ อ้างอิงจาก Sale (สำหรับใบตรวจถังบำบัด/ถังดักไขมันใต้ดิน)
 }
 
 export interface ChecklistBlock {
@@ -55,6 +56,7 @@ export interface ItemResult {
   note?: string;
   actual?: string;    // ค่าที่วัดได้จริง
   photos?: string[];  // รายการ URL ของรูป เช่น /uploads/xxxx.jpg
+  pipeLevel?: string; // ระดับท่อ อ้างอิงจาก Sale (สำหรับใบตรวจถังบำบัด/ถังดักไขมันใต้ดิน)
 }
 
 // ผลทดสอบในหมวด Tests

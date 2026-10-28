@@ -15,6 +15,7 @@ import ItemRow from "./ItemRow";
 import PhotoUploader from "./PhotoUploader";
 import QRCheckIn from "./QRCheckIn";
 import SiteSelfieModal from "./SiteSelfieModal";
+import GreaseTrapDrawing from "./GreaseTrapDrawing";
 import UserNav from "./UserNav";
 import { useAuth } from "./AuthProvider";
 import { BIGC_PMS } from "@/lib/auth";
@@ -154,6 +155,19 @@ export function getSectionCategory(code: string): CategoryTheme {
       cardBorder: "border-l-4 border-l-rose-500",
       iconBg: "bg-gradient-to-br from-rose-500 to-pink-600 text-white",
       pillColor: "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+    };
+  }
+  if (code === "GT" || code === "U" || code === "sanitary" || code === "greasetrap") {
+    return {
+      name: "สุขาภิบาล & ถังบำบัดใต้ดิน",
+      badgeBg: "bg-cyan-500/15",
+      badgeText: "text-cyan-800 dark:text-cyan-300",
+      badgeBorder: "border-cyan-500/30",
+      accentBg: "bg-cyan-500/10",
+      accentBorder: "border-cyan-500/40",
+      cardBorder: "border-l-4 border-l-cyan-500",
+      iconBg: "bg-gradient-to-br from-cyan-500 to-blue-600 text-white",
+      pillColor: "border-cyan-500/40 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
     };
   }
   return {
@@ -361,14 +375,17 @@ export default function RecordEditor({ id }: { id: string }) {
       }
     }
 
-    if (wizardStep < 16) {
+    const totalWizardSteps = checklist.sections.length + 2;
+    const maxWizardStep = totalWizardSteps - 1;
+
+    if (wizardStep < maxWizardStep) {
       const nextStep = wizardStep + 1;
       setWizardStep(nextStep);
-      if (nextStep < 15) {
+      if (nextStep < checklist.sections.length) {
         setActiveTab("checklist");
-      } else if (nextStep === 15) {
+      } else if (nextStep === checklist.sections.length) {
         setActiveTab("tests");
-      } else if (nextStep === 16) {
+      } else if (nextStep === checklist.sections.length + 1) {
         setActiveTab("signatures");
       }
       window.scrollTo({ top: 120, behavior: "smooth" });
@@ -379,11 +396,11 @@ export default function RecordEditor({ id }: { id: string }) {
     if (wizardStep > 0) {
       const prevStep = wizardStep - 1;
       setWizardStep(prevStep);
-      if (prevStep < 15) {
+      if (prevStep < checklist.sections.length) {
         setActiveTab("checklist");
-      } else if (prevStep === 15) {
+      } else if (prevStep === checklist.sections.length) {
         setActiveTab("tests");
-      } else if (prevStep === 16) {
+      } else if (prevStep === checklist.sections.length + 1) {
         setActiveTab("signatures");
       }
       window.scrollTo({ top: 120, behavior: "smooth" });
@@ -808,8 +825,8 @@ export default function RecordEditor({ id }: { id: string }) {
                       onChange={(e) => {
                         const step = Number(e.target.value);
                         setWizardStep(step);
-                        if (step < 15) setActiveTab("checklist");
-                        else if (step === 15) setActiveTab("tests");
+                        if (step < checklist.sections.length) setActiveTab("checklist");
+                        else if (step === checklist.sections.length) setActiveTab("tests");
                         else setActiveTab("signatures");
                       }}
                       className="text-xs font-bold py-1.5 px-3 rounded-lg border border-line bg-card text-ink focus:ring-2 focus:ring-brand/30 cursor-pointer"
@@ -819,8 +836,12 @@ export default function RecordEditor({ id }: { id: string }) {
                           #{s.code} {s.name} ({getSectionCategory(s.code).name})
                         </option>
                       ))}
-                      <option value={15}>#15 ผลทดสอบทางวิศวกรรม</option>
-                      <option value={16}>#16 ลงนาม & การอนุมัติ</option>
+                      <option value={checklist.sections.length}>
+                        #{checklist.sections.length + 1} ผลทดสอบทางวิศวกรรม
+                      </option>
+                      <option value={checklist.sections.length + 1}>
+                        #{checklist.sections.length + 2} ลงนาม & การอนุมัติ
+                      </option>
                     </select>
                   </div>
                 )}
@@ -839,7 +860,7 @@ export default function RecordEditor({ id }: { id: string }) {
                     <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold text-ink">
-                          ขั้นตอนที่ <strong className="text-brand font-display text-sm">{wizardStep + 1}</strong> / 17:
+                          ขั้นตอนที่ <strong className="text-brand font-display text-sm">{wizardStep + 1}</strong> / {checklist.sections.length + 2}:
                         </span>
                         <span className="text-xs font-bold text-ink">
                           #{curSec.code} {curSec.name}
@@ -1035,6 +1056,12 @@ export default function RecordEditor({ id }: { id: string }) {
 
                   {isOpen && (
                     <div className="border-t border-line/80">
+                      {sec.id === "greasetrap" && (
+                        <div className="p-3 sm:p-5 bg-sunken/30 border-b border-line/60">
+                          <GreaseTrapDrawing />
+                        </div>
+                      )}
+
                       {sec.desc && (
                         <div className="px-4 py-2 bg-sunken/40 text-xs text-ink3 border-b border-line/60 flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
@@ -1575,7 +1602,7 @@ export default function RecordEditor({ id }: { id: string }) {
             </div>
             <div className="text-[11px] text-ink3 truncate font-medium mt-0.5">
               {viewMode === "wizard"
-                ? `ขั้นตอนที่ ${wizardStep + 1} / 17 · ${dirty ? "มีการแก้ไขที่ยังไม่ได้บันทึก" : statusMsg}`
+                ? `ขั้นตอนที่ ${wizardStep + 1} / ${checklist.sections.length + 2} · ${dirty ? "มีการแก้ไขที่ยังไม่ได้บันทึก" : statusMsg}`
                 : dirty
                 ? "มีการแก้ไขที่ยังไม่ได้บันทึก"
                 : statusMsg}
@@ -1603,12 +1630,12 @@ export default function RecordEditor({ id }: { id: string }) {
               type="button"
               onClick={handleNextStep}
               className={`min-h-[42px] px-4 sm:px-6 rounded-xl font-display font-bold text-xs sm:text-sm transition-all active:scale-95 shadow-md flex items-center gap-1.5 ${
-                wizardStep >= 16
+                wizardStep >= checklist.sections.length + 1
                   ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25"
                   : "bg-brand hover:bg-brand/90 text-white shadow-brand/25"
               }`}
             >
-              <span>{wizardStep >= 16 ? "ตรวจเสร็จสิ้น" : "ถัดไป"}</span>
+              <span>{wizardStep >= checklist.sections.length + 1 ? "ตรวจเสร็จสิ้น" : "ถัดไป"}</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
