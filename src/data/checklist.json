@@ -1,9 +1,9 @@
 {
   "form": {
-    "formNo": "CS-QA-REQ (Mini)",
-    "rev": "3",
+    "formNo": "",
+    "rev": "",
     "eff": "2025",
-    "title": "ระบบตรวจรับงานโครงสร้าง BigC Mini"
+    "title": "ระบบตรวจรับงานโครงสร้าง Big-C"
   },
   "projectFields": [
     [

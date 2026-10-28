@@ -598,9 +598,8 @@ export default function RecordEditor({ id }: { id: string }) {
                 )}
               </div>
               <div className="text-[12px] text-white/75 truncate mt-0.5">
-                {checklist.form.formNo} · Rev.{checklist.form.rev}
-                {record.project.storeCode && ` · รหัส ${record.project.storeCode}`}
-                {record.project.contractor && ` · ${record.project.contractor}`}
+                {record.project.storeCode ? `รหัสสาขา ${record.project.storeCode}` : "ระบบตรวจรับงานก่อสร้าง Big-C"}
+                {record.project.contractor && ` · ผู้รับเหมา: ${record.project.contractor}`}
               </div>
             </div>
 
