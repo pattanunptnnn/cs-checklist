@@ -498,7 +498,7 @@ export default function LoginPage() {
                 className="w-full btn-primary min-h-[46px] text-sm font-bold flex items-center justify-center gap-2 mt-4 shadow-md cursor-pointer disabled:opacity-50"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>{isSubmitting ? "กำลังสร้างบัญชี..." : "ผู้ใช้ใหม่ (Sign In)"}</span>
+                <span>{isSubmitting ? "กำลังสร้างบัญชี..." : "Sign In เข้าระบบใช้งานทันที"}</span>
               </button>
 
               {/* ลิงก์สลับไปเข้าสู่ระบบ */}
