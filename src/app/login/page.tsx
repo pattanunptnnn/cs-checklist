@@ -447,10 +447,7 @@ export default function LoginPage() {
                           onChange={() => setSignUpRole(r)}
                           className="w-4 h-4 text-brand accent-brand cursor-pointer shrink-0"
                         />
-                        <div className="flex items-center gap-1.5 min-w-0 truncate">
-                          <span className="text-sm shrink-0">{badge.icon}</span>
-                          <span className="text-xs font-bold text-ink truncate">{badge.label}</span>
-                        </div>
+                        <span className="text-xs font-semibold text-ink truncate">{badge.label}</span>
                       </div>
                     );
                   })}
