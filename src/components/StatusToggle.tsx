@@ -36,9 +36,11 @@ const OPTS: {
 export default function StatusToggle({
   value,
   onChange,
+  disabled,
 }: {
   value: Status;
   onChange: (s: Status) => void;
+  disabled?: boolean;
 }) {
   return (
     <div
@@ -54,9 +56,12 @@ export default function StatusToggle({
             key={o.val}
             type="button"
             role="radio"
+            disabled={disabled}
             aria-checked={on}
-            onClick={() => onChange(on ? "" : o.val)}
-            className={`flex items-center justify-center gap-1.5 min-h-[46px] rounded-xl border text-[13.5px] transition-all duration-150 active:scale-[0.96] ${
+            onClick={() => !disabled && onChange(on ? "" : o.val)}
+            className={`flex items-center justify-center gap-1.5 min-h-[46px] rounded-xl border text-[13.5px] transition-all duration-150 ${
+              disabled ? "opacity-75 cursor-default" : "active:scale-[0.96]"
+            } ${
               on ? o.active : o.inactive
             }`}
           >

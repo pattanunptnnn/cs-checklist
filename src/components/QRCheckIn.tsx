@@ -34,6 +34,7 @@ interface QRCheckInProps {
   onCheckIn: (data: CheckInData) => void;
   onClearCheckIn?: () => void;
   onOpenSelfie?: () => void;
+  readOnly?: boolean;
 }
 
 export default function QRCheckIn({
@@ -44,6 +45,7 @@ export default function QRCheckIn({
   onCheckIn,
   onClearCheckIn,
   onOpenSelfie,
+  readOnly,
 }: QRCheckInProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
@@ -452,27 +454,29 @@ export default function QRCheckIn({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-end sm:self-center">
-              <button
-                type="button"
-                onClick={handleGpsInstantCheckIn}
-                disabled={gettingLocation}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-card border border-line text-ink2 hover:text-brand hover:border-brand transition-all flex items-center gap-1.5 shadow-sm"
-                title="กดเพื่ออัปเดตพิกัด GPS ณ ตำแหน่งปัจจุบันใหม่"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${gettingLocation ? "animate-spin text-brand" : ""}`} />
-                <span>{gettingLocation ? "กำลังค้นหาพิกัด…" : "อัปเดต GPS ใหม่"}</span>
-              </button>
-              {onClearCheckIn && (
+            {!readOnly && (
+              <div className="flex items-center gap-2 self-end sm:self-center">
                 <button
                   type="button"
-                  onClick={onClearCheckIn}
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-ink3 hover:text-fail transition-colors"
+                  onClick={handleGpsInstantCheckIn}
+                  disabled={gettingLocation}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-card border border-line text-ink2 hover:text-brand hover:border-brand transition-all flex items-center gap-1.5 shadow-sm"
+                  title="กดเพื่ออัปเดตพิกัด GPS ณ ตำแหน่งปัจจุบันใหม่"
                 >
-                  ล้างข้อมูล
+                  <RefreshCw className={`w-3.5 h-3.5 ${gettingLocation ? "animate-spin text-brand" : ""}`} />
+                  <span>{gettingLocation ? "กำลังค้นหาพิกัด…" : "อัปเดต GPS ใหม่"}</span>
                 </button>
-              )}
-            </div>
+                {onClearCheckIn && (
+                  <button
+                    type="button"
+                    onClick={onClearCheckIn}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-ink3 hover:text-fail transition-colors"
+                  >
+                    ล้างข้อมูล
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-transparent p-3.5 sm:p-4 rounded-xl border border-emerald-500/25">
@@ -495,39 +499,45 @@ export default function QRCheckIn({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 self-stretch sm:self-auto flex-wrap sm:flex-nowrap">
-              {/* ปุ่มหลัก: GPS Instant Check-in 1-Click ทันที */}
-              <button
-                type="button"
-                onClick={handleGpsInstantCheckIn}
-                disabled={gettingLocation}
-                className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold shadow-lg shadow-emerald-600/25 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white whitespace-nowrap flex-1 sm:flex-initial transition-all active:scale-95 disabled:opacity-60"
-                title="เช็คอินด้วยพิกัด GPS"
-              >
-                {gettingLocation ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                    <span>กำลังระบุพิกัด GPS…</span>
-                  </>
-                ) : (
-                  <>
-                    <Navigation className="w-4 h-4 text-emerald-200" />
-                    <span>เช็คอินพิกัด GPS</span>
-                  </>
-                )}
-              </button>
+            {!readOnly ? (
+              <div className="flex items-center gap-2 self-stretch sm:self-auto flex-wrap sm:flex-nowrap">
+                {/* ปุ่มหลัก: GPS Instant Check-in 1-Click ทันที */}
+                <button
+                  type="button"
+                  onClick={handleGpsInstantCheckIn}
+                  disabled={gettingLocation}
+                  className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold shadow-lg shadow-emerald-600/25 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white whitespace-nowrap flex-1 sm:flex-initial transition-all active:scale-95 disabled:opacity-60"
+                  title="เช็คอินด้วยพิกัด GPS"
+                >
+                  {gettingLocation ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                      <span>กำลังระบุพิกัด GPS…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Navigation className="w-4 h-4 text-emerald-200" />
+                      <span>เช็คอินพิกัด GPS</span>
+                    </>
+                  )}
+                </button>
 
-              {/* ปุ่มรอง: สแกน QR หน้างาน (ทางเลือกสำรอง) */}
-              <button
-                type="button"
-                onClick={() => setIsOpen(true)}
-                className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-card border border-line hover:border-brand text-ink hover:text-brand transition-all flex items-center justify-center gap-1.5"
-                title="สแกน QR Code ประจำไซต์ (ทางเลือกสำรอง)"
-              >
-                <QrCode className="w-4 h-4 text-ink3" />
-                <span className="hidden sm:inline">หรือสแกน QR</span>
-              </button>
-            </div>
+                {/* ปุ่มรอง: สแกน QR หน้างาน (ทางเลือกสำรอง) */}
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(true)}
+                  className="px-3 py-2.5 rounded-xl text-xs font-semibold bg-card border border-line hover:border-brand text-ink hover:text-brand transition-all flex items-center justify-center gap-1.5"
+                  title="สแกน QR Code ประจำไซต์ (ทางเลือกสำรอง)"
+                >
+                  <QrCode className="w-4 h-4 text-ink3" />
+                  <span className="hidden sm:inline">หรือสแกน QR</span>
+                </button>
+              </div>
+            ) : (
+              <span className="text-xs text-ink3 italic px-3 py-1.5 bg-sunken rounded-lg border border-line">
+                โหมดดูข้อมูลเท่านั้น (ไม่มีการเช็คอิน)
+              </span>
+            )}
           </div>
         )}
 
@@ -591,7 +601,7 @@ export default function QRCheckIn({
                   <Eye className="w-3.5 h-3.5" />
                   <span>ดูภาพ</span>
                 </button>
-                {onOpenSelfie && (
+                {!readOnly && onOpenSelfie && (
                   <button
                     type="button"
                     onClick={onOpenSelfie}
@@ -603,7 +613,7 @@ export default function QRCheckIn({
                 )}
               </>
             ) : (
-              onOpenSelfie && (
+              !readOnly && onOpenSelfie && (
                 <button
                   type="button"
                   onClick={onOpenSelfie}

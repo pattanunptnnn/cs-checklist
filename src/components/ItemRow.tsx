@@ -22,12 +22,14 @@ function ItemRow({
   result,
   onChange,
   watermarkMeta,
+  readOnly,
 }: {
   item: ChecklistItem;
   itemKey: string;
   result?: ItemResult;
   onChange: (key: string, patch: Partial<ItemResult>) => void;
   watermarkMeta?: WatermarkMeta;
+  readOnly?: boolean;
 }) {
   const r = result || EMPTY;
   const [showDetail, setShowDetail] = useState(false);
@@ -36,8 +38,8 @@ function ItemRow({
   const hasDetail = Boolean(item.crit || item.tool);
 
   // เตือนตามกฎ ITP — เตือนเฉพาะเมื่อผู้ใช้ลงผลแล้วเท่านั้น จะได้ไม่รบกวนตอนยังไม่เริ่ม
-  const needPhoto = item.photoReq && r.status !== "" && r.status !== "na" && photos.length === 0;
-  const needReason = r.status === "fail" && !(r.note || "").trim();
+  const needPhoto = !readOnly && item.photoReq && r.status !== "" && r.status !== "na" && photos.length === 0;
+  const needReason = !readOnly && r.status === "fail" && !(r.note || "").trim();
 
   return (
     <div
@@ -153,9 +155,11 @@ function ItemRow({
                     <input
                       id={`actual-${itemKey}`}
                       value={r.actual || ""}
+                      readOnly={readOnly}
+                      disabled={readOnly}
                       onChange={(e) => onChange(itemKey, { actual: e.target.value })}
                       placeholder={item.design ? `เช่น ${item.design}` : "กรอกขนาดที่ตรวจสอบจริง"}
-                      className={"field font-medium" + (item.unit ? " pr-14" : "")}
+                      className={`field font-medium ${readOnly ? "bg-sunken/40 cursor-default" : ""} ${item.unit ? " pr-14" : ""}`}
                     />
                     {item.unit && (
                       <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[12.5px] font-bold text-ink3 pointer-events-none bg-sunken px-1.5 py-0.5 rounded">
@@ -173,9 +177,11 @@ function ItemRow({
                   <input
                     id={`pipe-level-${itemKey}`}
                     value={r.pipeLevel || ""}
+                    readOnly={readOnly}
+                    disabled={readOnly}
                     onChange={(e) => onChange(itemKey, { pipeLevel: e.target.value })}
-                    placeholder="ระบุระดับท่อ เช่น BOP -450..."
-                    className="field font-medium"
+                    placeholder={readOnly ? "-" : "ระบุระดับท่อ เช่น BOP -450..."}
+                    className={`field font-medium ${readOnly ? "bg-sunken/40 cursor-default" : ""}`}
                   />
                 </div>
               </div>
@@ -193,10 +199,12 @@ function ItemRow({
                   <input
                     id={`actual-${itemKey}`}
                     value={r.actual || ""}
+                    readOnly={readOnly}
+                    disabled={readOnly}
                     onChange={(e) => onChange(itemKey, { actual: e.target.value })}
-                    placeholder="กรอกค่าตัวเลข เช่น 182 / 185 / 179"
+                    placeholder={readOnly ? "-" : "กรอกค่าตัวเลข เช่น 182 / 185 / 179"}
                     inputMode="decimal"
-                    className={"field tnum font-medium" + (item.unit ? " pr-14" : "")}
+                    className={`field tnum font-medium ${readOnly ? "bg-sunken/40 cursor-default" : ""} ${item.unit ? " pr-14" : ""}`}
                   />
                   {item.unit && (
                     <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[12.5px] font-bold text-ink3 pointer-events-none bg-sunken px-1.5 py-0.5 rounded">
@@ -210,18 +218,27 @@ function ItemRow({
         )}
 
         {/* ── ผลการตรวจ ── */}
-        <StatusToggle value={r.status} onChange={(s: Status) => onChange(itemKey, { status: s })} />
+        <StatusToggle value={r.status} disabled={readOnly} onChange={(s: Status) => onChange(itemKey, { status: s })} />
 
         {/* ── หมายเหตุ ── */}
         <div className="mt-2.5">
           <textarea
             id={`note-${itemKey}`}
             value={r.note || ""}
+            readOnly={readOnly}
             onChange={(e) => onChange(itemKey, { note: e.target.value })}
-            placeholder={needReason ? "ต้องระบุสาเหตุที่ไม่ผ่านในช่องนี้…" : "บันทึกหมายเหตุเพิ่มเติม / จุดที่ตรวจ (ถ้ามี)…"}
+            placeholder={
+              readOnly
+                ? r.note || "ไม่มีหมายเหตุเพิ่มเติม"
+                : needReason
+                ? "ต้องระบุสาเหตุที่ไม่ผ่านในช่องนี้…"
+                : "บันทึกหมายเหตุเพิ่มเติม / จุดที่ตรวจ (ถ้ามี)…"
+            }
             rows={r.status === "fail" || r.note ? 2 : 1}
             className={`field resize-y text-[13.5px] leading-snug transition-all ${
-              needReason
+              readOnly
+                ? "bg-sunken/40 cursor-default"
+                : needReason
                 ? "border-fail ring-2 ring-fail/20 bg-fail/5 placeholder:text-fail/70 font-medium"
                 : ""
             }`}
@@ -231,6 +248,7 @@ function ItemRow({
         {/* ── รูปภาพประกอบพร้อมลายน้ำ ── */}
         <PhotoUploader
           photos={photos}
+          readOnly={readOnly}
           onChange={(p) => onChange(itemKey, { photos: p })}
           watermarkMeta={{
             ...watermarkMeta,

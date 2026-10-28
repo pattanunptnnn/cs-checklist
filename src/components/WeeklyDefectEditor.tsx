@@ -13,6 +13,7 @@ import type {
 } from "@/lib/types";
 import QRCheckIn from "./QRCheckIn";
 import PhotoUploader from "./PhotoUploader";
+import { useAuth } from "./AuthProvider";
 import { BIGC_PMS } from "@/lib/auth";
 import {
   ArrowLeft,
@@ -55,6 +56,8 @@ const SEVERITIES: { id: DefectSeverity; label: string; color: string }[] = [
 
 export default function WeeklyDefectEditor({ id }: { id: string }) {
   const router = useRouter();
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
   const [record, setRecord] = useState<WeeklyDefectRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -93,7 +96,7 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
 
   // บันทึกข้อมูล
   const save = useCallback(async () => {
-    if (!record) return;
+    if (isAdmin || !record) return;
     setSaving(true);
     setStatusMsg("กำลังบันทึก…");
     const savedAt = new Date().toISOString();
@@ -116,22 +119,25 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
     } finally {
       setSaving(false);
     }
-  }, [record, id]);
+  }, [record, id, isAdmin]);
 
   // จัดการเช็คอินหน้างาน
   const handleCheckIn = useCallback((checkInData: CheckInData) => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => (prev ? { ...prev, checkIn: checkInData } : prev));
-  }, []);
+  }, [isAdmin]);
 
   const handleClearCheckIn = useCallback(() => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => (prev ? { ...prev, checkIn: null } : prev));
-  }, []);
+  }, [isAdmin]);
 
   // เพิ่ม Defect ข้อใหม่
   const handleAddDefect = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAdmin) return;
     if (!newDesc.trim()) return;
 
     const newItem: DefectItem = {
@@ -161,6 +167,7 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
 
   // อัปเดต Defect แต่ละข้อ
   const updateDefect = useCallback((defectId: string, patch: Partial<DefectItem>) => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => {
       if (!prev) return prev;
@@ -169,10 +176,11 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
         defects: prev.defects.map((d) => (d.id === defectId ? { ...d, ...patch } : d)),
       };
     });
-  }, []);
+  }, [isAdmin]);
 
   // ลบ Defect
   const removeDefect = useCallback((defectId: string) => {
+    if (isAdmin) return;
     if (!confirm("ยืนยันการลบรายการ Defect นี้?")) return;
     setDirty(true);
     setRecord((prev) => {
@@ -182,7 +190,7 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
         defects: prev.defects.filter((d) => d.id !== defectId),
       };
     });
-  }, []);
+  }, [isAdmin]);
 
   // สถิติในรอบนี้
   const summary = useMemo(() => {
@@ -280,6 +288,7 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
                   <User className="w-3 h-3 text-white/70" />
                   <span className="text-white/70 font-semibold">PM:</span>
                   <select
+                    disabled={isAdmin}
                     value={
                       BIGC_PMS.some((p) => `${p.name} (${p.zone})` === record.pm || p.name === record.pm)
                         ? record.pm
@@ -290,7 +299,7 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
                       setRecord((prev) => (prev ? { ...prev, pm: val } : prev));
                       setDirty(true);
                     }}
-                    className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
+                    className={`bg-transparent text-white font-bold text-xs focus:outline-none ${isAdmin ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
                   >
                     <option value="" className="text-ink bg-card">-- ยังไม่ระบุ PM --</option>
                     {BIGC_PMS.map((p) => (
@@ -332,8 +341,20 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-5 space-y-4">
+        {/* ────────── ป้ายเตือนโหมดดูข้อมูลสำหรับ Admin ────────── */}
+        {isAdmin && (
+          <div className="p-3.5 sm:p-4 rounded-2xl border border-sky-500/30 bg-sky-500/10 text-xs sm:text-sm text-sky-900 dark:text-sky-200 flex items-center gap-3 font-medium shadow-sm">
+            <span className="text-xl sm:text-2xl shrink-0">👁️</span>
+            <div>
+              <strong className="font-bold">โหมดผู้ดูแลระบบ (Admin View-Only):</strong>{" "}
+              คุณสามารถดูรายการ Defect ภาพถ่ายเปรียบเทียบ และสถานะทั้งหมดได้ แต่ไม่สามารถเพิ่ม แก้ไขสถานะ หรือลบรายการ Defect ได้
+            </div>
+          </div>
+        )}
+
         {/* ────────── 1. ระบบเช็คอิน QR + GPS หน้างาน ────────── */}
         <QRCheckIn
+          readOnly={isAdmin}
           storeName={record.store}
           storeCode={record.storeCode}
           pmName={record.pm}
@@ -355,14 +376,16 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowAddModal(true)}
-              className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold shadow-md shadow-brand/20 self-start sm:self-auto active:scale-95"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ เพิ่มรายการ Defect</span>
-            </button>
+            {!isAdmin && (
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold shadow-md shadow-brand/20 self-start sm:self-auto active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ เพิ่มรายการ Defect</span>
+              </button>
+            )}
           </div>
 
           {/* สถิติตัวเลข 4 สถานะ */}
@@ -496,8 +519,11 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
                       <div className="inline-flex p-1 bg-sunken rounded-xl border border-line text-xs self-start shrink-0">
                         <button
                           type="button"
+                          disabled={isAdmin}
                           onClick={() => updateDefect(d.id, { status: "open" })}
                           className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                            isAdmin ? "opacity-75 cursor-not-allowed " : ""
+                          }${
                             d.status === "open"
                               ? "bg-rose-600 text-white shadow-sm"
                               : "text-ink3 hover:text-ink"
@@ -507,8 +533,11 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
                         </button>
                         <button
                           type="button"
+                          disabled={isAdmin}
                           onClick={() => updateDefect(d.id, { status: "in_progress" })}
                           className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                            isAdmin ? "opacity-75 cursor-not-allowed " : ""
+                          }${
                             d.status === "in_progress"
                               ? "bg-amber-500 text-white shadow-sm"
                               : "text-ink3 hover:text-ink"
@@ -518,8 +547,11 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
                         </button>
                         <button
                           type="button"
+                          disabled={isAdmin}
                           onClick={() => updateDefect(d.id, { status: "resolved", resolvedAt: new Date().toISOString() })}
                           className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                            isAdmin ? "opacity-75 cursor-not-allowed " : ""
+                          }${
                             d.status === "resolved"
                               ? "bg-sky-600 text-white shadow-sm"
                               : "text-ink3 hover:text-ink"
@@ -529,8 +561,11 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
                         </button>
                         <button
                           type="button"
+                          disabled={isAdmin}
                           onClick={() => updateDefect(d.id, { status: "closed", closedAt: new Date().toISOString() })}
                           className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                            isAdmin ? "opacity-75 cursor-not-allowed " : ""
+                          }${
                             d.status === "closed"
                               ? "bg-emerald-600 text-white shadow-sm"
                               : "text-ink3 hover:text-ink"
@@ -556,6 +591,7 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
                         </div>
 
                         <PhotoUploader
+                          readOnly={isAdmin}
                           photos={d.beforePhotos}
                           onChange={(photos) => updateDefect(d.id, { beforePhotos: photos })}
                           watermarkMeta={{
@@ -578,6 +614,7 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
                         </div>
 
                         <PhotoUploader
+                          readOnly={isAdmin}
                           photos={d.afterPhotos}
                           onChange={(photos) => updateDefect(d.id, { afterPhotos: photos })}
                           watermarkMeta={{
@@ -601,14 +638,16 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
                         )}
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => removeDefect(d.id)}
-                        className="text-fail hover:underline font-semibold inline-flex items-center gap-1"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>ลบข้อนี้</span>
-                      </button>
+                      {!isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => removeDefect(d.id)}
+                          className="text-fail hover:underline font-semibold inline-flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>ลบข้อนี้</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -639,15 +678,24 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
               กลับหน้ารายการ
             </Link>
 
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving}
-              className="btn-primary px-6 py-2.5 text-xs font-bold flex items-center gap-2 shadow-lg shadow-brand/30"
-            >
-              <Save className="w-4 h-4" />
-              <span>{saving ? "กำลังบันทึก…" : "บันทึกผลตรวจ Defect"}</span>
-            </button>
+            {isAdmin ? (
+              <div
+                className="px-4 py-2 rounded-xl bg-sunken border border-line text-xs font-bold text-ink3 opacity-80 cursor-default"
+                title="บัญชีผู้ดูแลระบบ (Admin) อยู่ในโหมดดูข้อมูลเท่านั้น"
+              >
+                <span>👁️ ดูข้อมูลเท่านั้น</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving}
+                className="btn-primary px-6 py-2.5 text-xs font-bold flex items-center gap-2 shadow-lg shadow-brand/30"
+              >
+                <Save className="w-4 h-4" />
+                <span>{saving ? "กำลังบันทึก…" : "บันทึกผลตรวจ Defect"}</span>
+              </button>
+            )}
           </div>
         </div>
       </footer>

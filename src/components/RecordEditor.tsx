@@ -186,6 +186,7 @@ export function getSectionCategory(code: string): CategoryTheme {
 export default function RecordEditor({ id }: { id: string }) {
   const { user, role } = useAuth();
   const isSupervisor = role === "supervisor";
+  const isAdmin = role === "admin";
   const [record, setRecord] = useState<InspectionRecord | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -240,15 +241,17 @@ export default function RecordEditor({ id }: { id: string }) {
   }, [dirty]);
 
   const update = useCallback((key: string, patch: Partial<ItemResult>) => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => {
       if (!prev) return prev;
       const cur: ItemResult = prev.items[key] ?? { status: "" };
       return { ...prev, items: { ...prev.items, [key]: { ...cur, ...patch } } };
     });
-  }, []);
+  }, [isAdmin]);
 
   const updateTest = useCallback((key: string, patch: Partial<TestResult>) => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => {
       if (!prev) return prev;
@@ -261,9 +264,10 @@ export default function RecordEditor({ id }: { id: string }) {
         },
       };
     });
-  }, []);
+  }, [isAdmin]);
 
   const updateSignature = useCallback((role: string, patch: Partial<SignatureData>) => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => {
       if (!prev) return prev;
@@ -276,35 +280,40 @@ export default function RecordEditor({ id }: { id: string }) {
         },
       };
     });
-  }, []);
+  }, [isAdmin]);
 
   const updateProject = useCallback((k: string, v: string) => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => (prev ? { ...prev, project: { ...prev.project, [k]: v } } : prev));
-  }, []);
+  }, [isAdmin]);
 
   const updateApproval = useCallback((status: string, comment?: string) => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => (prev ? {
       ...prev,
       approvalStatus: status,
       ...(comment !== undefined ? { approvalComment: comment } : {}),
     } : prev));
-  }, []);
+  }, [isAdmin]);
 
   const handleCheckIn = useCallback((data: CheckInData) => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => (prev ? { ...prev, checkIn: data } : prev));
-  }, []);
+  }, [isAdmin]);
 
   const handleClearCheckIn = useCallback(() => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => (prev ? { ...prev, checkIn: null } : prev));
-  }, []);
+  }, [isAdmin]);
 
   const [isSelfieModalOpen, setIsSelfieModalOpen] = useState(false);
 
   const handleSaveSelfie = useCallback(async (photoUrl: string) => {
+    if (isAdmin) return;
     setDirty(true);
     setRecord((prev) => {
       if (!prev) return prev;
@@ -326,7 +335,7 @@ export default function RecordEditor({ id }: { id: string }) {
       };
     });
     setStatusMsg("บันทึกภาพ Selfie หน้างานสำเร็จ");
-  }, [user]);
+  }, [user, isAdmin]);
 
   // ตรวจสอบว่าในหมวดปัจจุบัน มีข้อที่บังคับรูปแล้วยังไม่ได้แนบหรือไม่
   const validateStepPhotos = useCallback(
@@ -484,7 +493,7 @@ export default function RecordEditor({ id }: { id: string }) {
   );
 
   async function save() {
-    if (!record) return;
+    if (isAdmin || !record) return;
     setSaving(true);
     setStatusMsg("กำลังบันทึก…");
     const savedAt = new Date().toISOString();
@@ -507,6 +516,7 @@ export default function RecordEditor({ id }: { id: string }) {
 
   // ทำเครื่องหมาย "ผ่านทั้งหมด" ให้หมวดนี้เพื่อความรวดเร็ว
   function passAllInSection(sec: typeof checklist.sections[0]) {
+    if (isAdmin) return;
     if (!confirm(`ทำเครื่องหมาย "ผ่านเกณฑ์" ให้ทุกรายการที่ยังไม่ตรวจใน "${sec.name}"?`)) return;
     setDirty(true);
     setRecord((prev) => {
@@ -695,9 +705,21 @@ export default function RecordEditor({ id }: { id: string }) {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-5">
+        {/* ─────────── ป้ายเตือนโหมดดูข้อมูลสำหรับ Admin ─────────── */}
+        {isAdmin && (
+          <div className="mb-4 p-3.5 sm:p-4 rounded-2xl border border-sky-500/30 bg-sky-500/10 text-xs sm:text-sm text-sky-900 dark:text-sky-200 flex items-center gap-3 font-medium shadow-sm">
+            <span className="text-xl sm:text-2xl shrink-0">👁️</span>
+            <div>
+              <strong className="font-bold">โหมดผู้ดูแลระบบ (Admin View-Only):</strong>{" "}
+              คุณสามารถดูข้อมูล รายการตรวจ พิกัด GPS เช็คอิน และผลทดสอบทั้งหมดได้ แต่ไม่สามารถแก้ไขข้อมูลหรือลงนามในใบตรวจนี้ได้
+            </div>
+          </div>
+        )}
+
         {/* ─────────── ระบบสแกน QR Code & เช็คอินพิกัดหน้างานจริง ─────────── */}
         <div className="mb-4">
           <QRCheckIn
+            readOnly={isAdmin}
             storeName={record.project.store}
             storeCode={record.project.storeCode}
             pmName={record.project.pm || user?.name}
@@ -743,15 +765,16 @@ export default function RecordEditor({ id }: { id: string }) {
                     <label key={key} className="block">
                       <div className="flex items-center justify-between mb-1.5">
                         <span className="text-xs font-bold text-ink2">{label}</span>
-                        <span className="text-[10.5px] text-brand font-semibold">เลือกหรือพิมพ์เอง</span>
+                        {!isAdmin && <span className="text-[10.5px] text-brand font-semibold">เลือกหรือพิมพ์เอง</span>}
                       </div>
                       <input
                         id={`project-${key}`}
                         list="bigc-pms-datalist"
+                        disabled={isAdmin}
                         value={record.project[key] || ""}
                         onChange={(e) => updateProject(key, e.target.value)}
                         placeholder="เลือกชื่อ PM หรือระบุเอง..."
-                        className="field"
+                        className={`field ${isAdmin ? "bg-sunken opacity-80 cursor-not-allowed" : ""}`}
                       />
                       <datalist id="bigc-pms-datalist">
                         {BIGC_PMS.map((p) => (
@@ -769,10 +792,11 @@ export default function RecordEditor({ id }: { id: string }) {
                     <span className="block text-xs font-bold text-ink2 mb-1.5">{label}</span>
                     <input
                       id={`project-${key}`}
+                      disabled={isAdmin}
                       value={record.project[key] || ""}
                       onChange={(e) => updateProject(key, e.target.value)}
                       placeholder={`กรอก ${label.split(" (")[0]}`}
-                      className="field"
+                      className={`field ${isAdmin ? "bg-sunken opacity-80 cursor-not-allowed" : ""}`}
                     />
                   </label>
                 );
@@ -1029,7 +1053,7 @@ export default function RecordEditor({ id }: { id: string }) {
 
                     <div className="flex items-center gap-2 pl-2">
                       {/* ปุ่ม Pass All ช่วยให้บันทึกเร็ว */}
-                      {!done && (
+                      {!isAdmin && !done && (
                         <button
                           type="button"
                           onClick={() => passAllInSection(sec)}
@@ -1105,6 +1129,7 @@ export default function RecordEditor({ id }: { id: string }) {
                                 result={record.items[key]}
                                 onChange={update}
                                 watermarkMeta={watermarkMeta}
+                                readOnly={isAdmin}
                               />
                             ))}
                           </div>
@@ -1174,8 +1199,11 @@ export default function RecordEditor({ id }: { id: string }) {
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
+                          disabled={isAdmin}
                           onClick={() => updateTest(tKey, { passed: tRes.passed === true ? null : true })}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                            isAdmin ? "opacity-75 cursor-not-allowed " : ""
+                          }${
                             tRes.passed === true
                               ? "bg-pass text-white shadow-sm"
                               : "bg-sunken text-ink2 border border-line hover:border-pass"
@@ -1186,8 +1214,11 @@ export default function RecordEditor({ id }: { id: string }) {
                         </button>
                         <button
                           type="button"
+                          disabled={isAdmin}
                           onClick={() => updateTest(tKey, { passed: tRes.passed === false ? null : false })}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                            isAdmin ? "opacity-75 cursor-not-allowed " : ""
+                          }${
                             tRes.passed === false
                               ? "bg-fail text-white shadow-sm"
                               : "bg-sunken text-ink2 border border-line hover:border-fail"
@@ -1205,10 +1236,11 @@ export default function RecordEditor({ id }: { id: string }) {
                           ค่าที่วัดได้จริง {testItem.unit ? `(${testItem.unit})` : ""}
                         </label>
                         <input
+                          disabled={isAdmin}
                           value={tRes.actual || ""}
                           onChange={(e) => updateTest(tKey, { actual: e.target.value })}
                           placeholder={`เช่น ${testItem.design || "ใส่ผลการทดสอบ"}`}
-                          className="field"
+                          className={`field ${isAdmin ? "bg-sunken opacity-80 cursor-not-allowed" : ""}`}
                         />
                       </div>
                       <div>
@@ -1216,16 +1248,18 @@ export default function RecordEditor({ id }: { id: string }) {
                           หมายเหตุ / เลขที่ใบรับรอง Lab
                         </label>
                         <input
+                          disabled={isAdmin}
                           value={tRes.note || ""}
                           onChange={(e) => updateTest(tKey, { note: e.target.value })}
                           placeholder="เช่น ใบผลทดสอบจาก CPAC ลว. 15/09/25"
-                          className="field"
+                          className={`field ${isAdmin ? "bg-sunken opacity-80 cursor-not-allowed" : ""}`}
                         />
                       </div>
                     </div>
 
                     <div className="mt-3">
                       <PhotoUploader
+                        readOnly={isAdmin}
                         photos={photos}
                         onChange={(p) => updateTest(tKey, { photos: p })}
                         watermarkMeta={{
@@ -1372,15 +1406,17 @@ export default function RecordEditor({ id }: { id: string }) {
                       ⏰ บันทึกเมื่อ {new Date(record.checkIn.selfieTimestamp || record.checkIn.timestamp).toLocaleString("th-TH")} น.
                     </div>
                   </div>
-                  <div className="sm:ml-auto">
-                    <button
-                      type="button"
-                      onClick={() => setIsSelfieModalOpen(true)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-card border border-line hover:border-brand text-brand transition-colors"
-                    >
-                      ถ่ายใหม่
-                    </button>
-                  </div>
+                  {!isAdmin && (
+                    <div className="sm:ml-auto">
+                      <button
+                        type="button"
+                        onClick={() => setIsSelfieModalOpen(true)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-card border border-line hover:border-brand text-brand transition-colors"
+                      >
+                        ถ่ายใหม่
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-rose-500/5 p-3.5 rounded-xl border border-rose-500/25">
@@ -1395,13 +1431,15 @@ export default function RecordEditor({ id }: { id: string }) {
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsSelfieModalOpen(true)}
-                    className="btn-primary text-xs py-2 px-3.5 font-bold shadow-md shadow-brand/20 whitespace-nowrap self-end sm:self-center shrink-0"
-                  >
-                    📸 ถ่ายภาพ Selfie ตอนนี้
-                  </button>
+                  {!isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setIsSelfieModalOpen(true)}
+                      className="btn-primary text-xs py-2 px-3.5 font-bold shadow-md shadow-brand/20 whitespace-nowrap self-end sm:self-center shrink-0"
+                    >
+                      📸 ถ่ายภาพ Selfie ตอนนี้
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1411,7 +1449,7 @@ export default function RecordEditor({ id }: { id: string }) {
               {checklist.signRoles.map(([roleKey, roleLabel]) => {
                 const sig = record.signatures?.[roleKey] || { name: "", date: "" };
                 const isApproverRole = roleKey === "approve";
-                const canSignThis = isApproverRole ? isSupervisor : true;
+                const canSignThis = !isAdmin && (isApproverRole ? isSupervisor : true);
 
                 return (
                   <div key={roleKey} className="card p-4 flex flex-col justify-between">
@@ -1452,7 +1490,11 @@ export default function RecordEditor({ id }: { id: string }) {
                     </div>
 
                     <div className="pt-3 border-t border-line/60">
-                      {canSignThis ? (
+                      {isAdmin ? (
+                        <div className="w-full py-2 rounded-xl text-xs font-bold bg-sunken text-ink3 border border-line text-center opacity-70">
+                          👁️ โหมดดูข้อมูลเท่านั้น (Admin)
+                        </div>
+                      ) : canSignThis ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -1611,19 +1653,28 @@ export default function RecordEditor({ id }: { id: string }) {
 
           {/* ปุ่มบันทึก & ปุ่มถัดไป */}
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving || !dirty}
-              className={`min-h-[42px] px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm flex items-center gap-1.5 ${
-                dirty
-                  ? "bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25 active:scale-95"
-                  : "bg-sunken border border-line text-ink3 opacity-70 cursor-not-allowed"
-              }`}
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{saving ? "กำลังบันทึก…" : dirty ? "บันทึก" : "บันทึกแล้ว"}</span>
-            </button>
+            {isAdmin ? (
+              <div
+                className="min-h-[42px] px-3.5 sm:px-4 rounded-xl font-bold text-xs sm:text-sm bg-sunken border border-line text-ink3 flex items-center gap-1.5 opacity-80 cursor-default"
+                title="บัญชีผู้ดูแลระบบ (Admin) อยู่ในโหมดดูข้อมูลเท่านั้น"
+              >
+                <span>👁️ ดูข้อมูลเท่านั้น</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving || !dirty}
+                className={`min-h-[42px] px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-sm flex items-center gap-1.5 ${
+                  dirty
+                    ? "bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25 active:scale-95"
+                    : "bg-sunken border border-line text-ink3 opacity-70 cursor-not-allowed"
+                }`}
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{saving ? "กำลังบันทึก…" : dirty ? "บันทึก" : "บันทึกแล้ว"}</span>
+              </button>
+            )}
 
             {/* ปุ่มขั้นตอนถัดไป */}
             <button

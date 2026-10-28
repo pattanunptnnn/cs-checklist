@@ -252,10 +252,12 @@ export default function PhotoUploader({
   photos,
   onChange,
   watermarkMeta,
+  readOnly,
 }: {
   photos: string[];
   onChange: (photos: string[]) => void;
   watermarkMeta?: WatermarkMeta;
+  readOnly?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -263,7 +265,7 @@ export default function PhotoUploader({
   const [preview, setPreview] = useState<string | null>(null);
 
   async function handleFiles(files: FileList | null) {
-    if (!files || !files.length) return;
+    if (readOnly || !files || !files.length) return;
     setBusy(true);
     setError("");
     const added: string[] = [];
@@ -289,6 +291,7 @@ export default function PhotoUploader({
   }
 
   function removeAt(idx: number) {
+    if (readOnly) return;
     onChange(photos.filter((_, i) => i !== idx));
   }
 
@@ -311,39 +314,47 @@ export default function PhotoUploader({
             <div className="absolute bottom-1 left-1 bg-black/60 backdrop-blur-xs text-[9px] text-emerald-300 px-1 py-0.2 rounded font-medium">
               ✓ Watermarked
             </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                removeAt(idx);
-              }}
-              aria-label={`ลบรูปที่ ${idx + 1}`}
-              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-ink/75 text-white
-                         grid place-items-center backdrop-blur-sm hover:bg-fail transition-colors"
-            >
-              <X className="w-3.5 h-3.5 stroke-[2.5]" />
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeAt(idx);
+                }}
+                aria-label={`ลบรูปที่ ${idx + 1}`}
+                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-ink/75 text-white
+                           grid place-items-center backdrop-blur-sm hover:bg-fail transition-colors"
+              >
+                <X className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
+            )}
           </div>
         ))}
 
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={busy}
-          className="w-[76px] h-[76px] rounded-xl border-2 border-dashed border-line2/80 bg-sunken/80
-                     text-ink2 flex flex-col items-center justify-center gap-1 leading-none
-                     hover:border-brand hover:text-brand hover:bg-brand/5 transition-all active:scale-95 disabled:opacity-60 shadow-sm"
-          title="แนบรูปถ่ายหน้างาน (ระบบจะประทับลายน้ำวันเวลาและสาขาอัตโนมัติ)"
-        >
-          {busy ? (
-            <div className="w-5 h-5 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <>
-              <Camera className="w-5 h-5 text-ink2 stroke-[2]" />
-              <span className="text-[11px] font-semibold text-ink3">แนบรูป</span>
-            </>
-          )}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+            className="w-[76px] h-[76px] rounded-xl border-2 border-dashed border-line2/80 bg-sunken/80
+                       text-ink2 flex flex-col items-center justify-center gap-1 leading-none
+                       hover:border-brand hover:text-brand hover:bg-brand/5 transition-all active:scale-95 disabled:opacity-60 shadow-sm"
+            title="แนบรูปถ่ายหน้างาน (ระบบจะประทับลายน้ำวันเวลาและสาขาอัตโนมัติ)"
+          >
+            {busy ? (
+              <div className="w-5 h-5 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <Camera className="w-5 h-5 text-ink2 stroke-[2]" />
+                <span className="text-[11px] font-semibold text-ink3">แนบรูป</span>
+              </>
+            )}
+          </button>
+        )}
+
+        {readOnly && photos.length === 0 && (
+          <span className="text-xs text-ink3 italic py-2">ไม่มีภาพถ่ายแนบ</span>
+        )}
 
         <input
           ref={inputRef}
@@ -358,10 +369,12 @@ export default function PhotoUploader({
         />
       </div>
 
-      <div className="flex items-center gap-1.5 text-[11px] text-ink3 mt-1.5">
-        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-        <span>ระบบประทับลายน้ำยืนยันวัน-เวลา สาขา และพิกัดลงในภาพอัตโนมัติ</span>
-      </div>
+      {!readOnly && (
+        <div className="flex items-center gap-1.5 text-[11px] text-ink3 mt-1.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span>ระบบประทับลายน้ำยืนยันวัน-เวลา สาขา และพิกัดลงในภาพอัตโนมัติ</span>
+        </div>
+      )}
 
       {error && (
         <div className="flex items-center gap-1.5 text-[12px] font-medium text-fail mt-2 bg-fail/10 px-2.5 py-1.5 rounded-lg border border-fail/20">
