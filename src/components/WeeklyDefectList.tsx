@@ -223,8 +223,8 @@ export default function WeeklyDefectList() {
           <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full border border-white/15">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] font-semibold tracking-wider uppercase text-white/90">
-                Big-C Quality Control · Punch List
+              <span className="text-[11px] font-semibold tracking-wider text-white/90">
+                ระบบตรวจรับงาน Big-C
               </span>
             </div>
 

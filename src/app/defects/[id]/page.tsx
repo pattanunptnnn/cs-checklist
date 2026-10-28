@@ -1,7 +1,7 @@
 import WeeklyDefectEditor from "@/components/WeeklyDefectEditor";
 
 export const metadata = {
-  title: "จัดการและตรวจรับ Defect รายสัปดาห์ | Big-C Quality Control",
+  title: "จัดการและตรวจรับ Defect รายสัปดาห์ | Big-C",
   description: "บันทึกผลการแก้ไข Defect เปรียบเทียบภาพถ่าย Before/After และตรวจปิดงาน",
 };
 

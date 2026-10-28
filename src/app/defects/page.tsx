@@ -1,7 +1,7 @@
 import WeeklyDefectList from "@/components/WeeklyDefectList";
 
 export const metadata = {
-  title: "ระบบตรวจและติดตาม Defect รายสัปดาห์ | Big-C Quality Control",
+  title: "ระบบตรวจและติดตาม Defect รายสัปดาห์ | Big-C",
   description: "บันทึกและติดตามข้อบกพร่องงานก่อสร้างรายสัปดาห์ พร้อมภาพถ่าย Before/After และสถานะการแก้ไข",
 };
 
