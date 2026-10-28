@@ -201,7 +201,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* ────────── แถบสลับ Log In / Sign In ────────── */}
+          {/* ────────── แถบสลับ เข้าสู่ระบบ (Log In) / ผู้ใช้ใหม่ (Sign In) ────────── */}
           <div className="grid grid-cols-2 p-1 bg-sunken rounded-2xl border border-line mb-6 text-xs font-bold">
             <button
               type="button"
@@ -217,7 +217,7 @@ export default function LoginPage() {
               }`}
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>Log In</span>
+              <span>เข้าสู่ระบบ (Log In)</span>
             </button>
             <button
               type="button"
@@ -233,7 +233,7 @@ export default function LoginPage() {
               }`}
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>Sign In</span>
+              <span>ผู้ใช้ใหม่ (Sign In)</span>
             </button>
           </div>
 
@@ -294,7 +294,7 @@ export default function LoginPage() {
                 className="w-full btn-primary min-h-[46px] text-sm font-bold flex items-center justify-center gap-2 mt-4 shadow-md cursor-pointer disabled:opacity-50"
               >
                 <LogIn className="w-4 h-4" />
-                <span>{isSubmitting ? "กำลังเข้าสู่ระบบ..." : "Log In"}</span>
+                <span>{isSubmitting ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ (Log In)"}</span>
               </button>
 
               {/* ลิงก์สลับไปสร้างบัญชี */}
@@ -309,7 +309,7 @@ export default function LoginPage() {
                   }}
                   className="text-xs font-bold text-brand hover:underline cursor-pointer"
                 >
-                  Sign In ที่นี่
+                  ผู้ใช้ใหม่ (Sign In) ที่นี่
                 </button>
               </div>
             </form>
@@ -498,7 +498,7 @@ export default function LoginPage() {
                 className="w-full btn-primary min-h-[46px] text-sm font-bold flex items-center justify-center gap-2 mt-4 shadow-md cursor-pointer disabled:opacity-50"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>{isSubmitting ? "กำลังสร้างบัญชี..." : "Sign In"}</span>
+                <span>{isSubmitting ? "กำลังสร้างบัญชี..." : "ผู้ใช้ใหม่ (Sign In)"}</span>
               </button>
 
               {/* ลิงก์สลับไปเข้าสู่ระบบ */}
@@ -513,7 +513,7 @@ export default function LoginPage() {
                   }}
                   className="text-xs font-bold text-brand hover:underline cursor-pointer"
                 >
-                  Log In ที่นี่
+                  เข้าสู่ระบบ (Log In) ที่นี่
                 </button>
               </div>
             </form>
