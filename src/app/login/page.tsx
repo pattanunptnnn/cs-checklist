@@ -422,10 +422,10 @@ export default function LoginPage() {
               {/* ────────── เลือกลักษณะบทบาท (Role Selection) ────────── */}
               <div>
                 <label className="block text-xs font-bold text-ink2 mb-2">
-                  เลือกบทบาทหน้าที่ในระบบ (Role) <span className="text-rose-500">*</span>
+                  เลือกบทบาทในระบบ (Role) <span className="text-rose-500">*</span>
                 </label>
 
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {(["pm", "supervisor", "admin"] as UserRole[]).map((r) => {
                     const badge = getRoleBadgeInfo(r);
                     const isSelected = signUpRole === r;
@@ -434,32 +434,22 @@ export default function LoginPage() {
                       <div
                         key={r}
                         onClick={() => setSignUpRole(r)}
-                        className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                        className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 ${
                           isSelected
                             ? "border-brand bg-brand/5 ring-2 ring-brand/20 shadow-sm"
                             : "border-line hover:border-brand/40 bg-card"
                         }`}
                       >
-                        <div className="pt-0.5">
-                          <input
-                            type="radio"
-                            name="role"
-                            checked={isSelected}
-                            onChange={() => setSignUpRole(r)}
-                            className="w-4 h-4 text-brand accent-brand cursor-pointer"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">{badge.icon}</span>
-                            <span className="text-xs font-bold text-ink">{badge.label}</span>
-                            <span className={`chip ${badge.bg} ${badge.text} ${badge.border} text-[10px] py-0.2`}>
-                              {r.toUpperCase()}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-ink3 mt-0.5 leading-snug">
-                            {badge.desc}
-                          </p>
+                        <input
+                          type="radio"
+                          name="role"
+                          checked={isSelected}
+                          onChange={() => setSignUpRole(r)}
+                          className="w-4 h-4 text-brand accent-brand cursor-pointer shrink-0"
+                        />
+                        <div className="flex items-center gap-1.5 min-w-0 truncate">
+                          <span className="text-sm shrink-0">{badge.icon}</span>
+                          <span className="text-xs font-bold text-ink truncate">{badge.label}</span>
                         </div>
                       </div>
                     );

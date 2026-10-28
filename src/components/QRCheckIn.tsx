@@ -502,7 +502,7 @@ export default function QRCheckIn({
                 onClick={handleGpsInstantCheckIn}
                 disabled={gettingLocation}
                 className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold shadow-lg shadow-emerald-600/25 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white whitespace-nowrap flex-1 sm:flex-initial transition-all active:scale-95 disabled:opacity-60"
-                title="เช็คอินด้วยพิกัดดาวเทียม GPS สดทันที ไม่ต้องใช้ป้าย QR"
+                title="เช็คอินด้วยพิกัด GPS"
               >
                 {gettingLocation ? (
                   <>
@@ -512,7 +512,7 @@ export default function QRCheckIn({
                 ) : (
                   <>
                     <Navigation className="w-4 h-4 text-emerald-200" />
-                    <span>📍 เช็คอินพิกัด GPS สดทันที</span>
+                    <span>เช็คอินพิกัด GPS</span>
                   </>
                 )}
               </button>
