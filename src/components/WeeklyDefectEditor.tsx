@@ -121,18 +121,61 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
     }
   }, [record, id, isAdmin]);
 
-  // จัดการเช็คอินหน้างาน
+  // จัดการเช็คอินหน้างาน พร้อม Auto-Save บันทึกลงฐานข้อมูลทันที
   const handleCheckIn = useCallback((checkInData: CheckInData) => {
     if (isAdmin) return;
-    setDirty(true);
-    setRecord((prev) => (prev ? { ...prev, checkIn: checkInData } : prev));
-  }, [isAdmin]);
+    setStatusMsg("กำลังบันทึกพิกัดเช็คอินอัตโนมัติ…");
+    const savedAt = new Date().toISOString();
+    setRecord((prev) => {
+      if (!prev) return prev;
+      const updated: WeeklyDefectRecord = { ...prev, checkIn: checkInData, savedAt };
+      fetch(`/api/defects/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      })
+        .then((res) => {
+          if (res.ok) {
+            setDirty(false);
+            setStatusMsg("เช็คอินพิกัดและบันทึกอัตโนมัติเรียบร้อย");
+            setTimeout(() => setStatusMsg(""), 3000);
+          } else {
+            setDirty(true);
+          }
+        })
+        .catch(() => {
+          setDirty(true);
+        });
+      return updated;
+    });
+  }, [id, isAdmin]);
 
   const handleClearCheckIn = useCallback(() => {
     if (isAdmin) return;
-    setDirty(true);
-    setRecord((prev) => (prev ? { ...prev, checkIn: null } : prev));
-  }, [isAdmin]);
+    const savedAt = new Date().toISOString();
+    setRecord((prev) => {
+      if (!prev) return prev;
+      const updated: WeeklyDefectRecord = { ...prev, checkIn: null, savedAt };
+      fetch(`/api/defects/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      })
+        .then((res) => {
+          if (res.ok) {
+            setDirty(false);
+            setStatusMsg("ล้างข้อมูลเช็คอินเรียบร้อย");
+            setTimeout(() => setStatusMsg(""), 3000);
+          } else {
+            setDirty(true);
+          }
+        })
+        .catch(() => {
+          setDirty(true);
+        });
+      return updated;
+    });
+  }, [id, isAdmin]);
 
   // เพิ่ม Defect ข้อใหม่
   const handleAddDefect = (e: React.FormEvent) => {

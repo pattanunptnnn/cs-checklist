@@ -300,21 +300,66 @@ export default function RecordEditor({ id }: { id: string }) {
 
   const handleCheckIn = useCallback((data: CheckInData) => {
     if (isAdmin) return;
-    setDirty(true);
-    setRecord((prev) => (prev ? { ...prev, checkIn: data } : prev));
-  }, [isAdmin]);
+    setStatusMsg("กำลังบันทึกพิกัดเช็คอินอัตโนมัติ…");
+    const savedAt = new Date().toISOString();
+    setRecord((prev) => {
+      if (!prev) return prev;
+      const updated: InspectionRecord = { ...prev, checkIn: data, savedAt };
+      fetch(`/api/records/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      })
+        .then((res) => {
+          if (res.ok) {
+            setDirty(false);
+            setStatusMsg(`เช็คอินพิกัดและบันทึกอัตโนมัติเรียบร้อย (${fmtShort(savedAt)})`);
+          } else {
+            setDirty(true);
+            setStatusMsg("เช็คอินสำเร็จ แต่บันทึกลงเซิร์ฟเวอร์ไม่สำเร็จ");
+          }
+        })
+        .catch(() => {
+          setDirty(true);
+          setStatusMsg("เช็คอินสำเร็จ แต่บันทึกลงเซิร์ฟเวอร์ไม่สำเร็จ");
+        });
+      return updated;
+    });
+  }, [id, isAdmin]);
 
   const handleClearCheckIn = useCallback(() => {
     if (isAdmin) return;
-    setDirty(true);
-    setRecord((prev) => (prev ? { ...prev, checkIn: null } : prev));
-  }, [isAdmin]);
+    setStatusMsg("กำลังล้างข้อมูลเช็คอิน…");
+    const savedAt = new Date().toISOString();
+    setRecord((prev) => {
+      if (!prev) return prev;
+      const updated: InspectionRecord = { ...prev, checkIn: null, savedAt };
+      fetch(`/api/records/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      })
+        .then((res) => {
+          if (res.ok) {
+            setDirty(false);
+            setStatusMsg(`ล้างข้อมูลเช็คอินและบันทึกแล้ว (${fmtShort(savedAt)})`);
+          } else {
+            setDirty(true);
+          }
+        })
+        .catch(() => {
+          setDirty(true);
+        });
+      return updated;
+    });
+  }, [id, isAdmin]);
 
   const [isSelfieModalOpen, setIsSelfieModalOpen] = useState(false);
 
   const handleSaveSelfie = useCallback(async (photoUrl: string) => {
     if (isAdmin) return;
-    setDirty(true);
+    setStatusMsg("กำลังบันทึกภาพ Selfie และข้อมูลอัตโนมัติ…");
+    const savedAt = new Date().toISOString();
     setRecord((prev) => {
       if (!prev) return prev;
       const existing = prev.checkIn || {
@@ -324,7 +369,7 @@ export default function RecordEditor({ id }: { id: string }) {
         address: prev.project.store || "หน้างาน Big-C",
         verified: true,
       };
-      return {
+      const updated: InspectionRecord = {
         ...prev,
         checkIn: {
           ...existing,
@@ -332,10 +377,27 @@ export default function RecordEditor({ id }: { id: string }) {
           selfiePhoto: photoUrl,
           selfieTimestamp: new Date().toISOString(),
         },
+        savedAt,
       };
+      fetch(`/api/records/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      })
+        .then((res) => {
+          if (res.ok) {
+            setDirty(false);
+            setStatusMsg(`บันทึกภาพ Selfie และข้อมูลอัตโนมัติสำเร็จ (${fmtShort(savedAt)})`);
+          } else {
+            setDirty(true);
+          }
+        })
+        .catch(() => {
+          setDirty(true);
+        });
+      return updated;
     });
-    setStatusMsg("บันทึกภาพ Selfie หน้างานสำเร็จ");
-  }, [user, isAdmin]);
+  }, [id, user, isAdmin]);
 
   // ตรวจสอบว่าในหมวดปัจจุบัน มีข้อที่บังคับรูปแล้วยังไม่ได้แนบหรือไม่
   const validateStepPhotos = useCallback(
