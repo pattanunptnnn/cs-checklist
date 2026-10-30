@@ -32,6 +32,7 @@ import {
   BarChart3,
   RefreshCw,
   Plus,
+  FileText,
 } from "lucide-react";
 import UserNav from "./UserNav";
 import { BIGC_PMS, isRecordOwnedByPm } from "@/lib/auth";
@@ -477,25 +478,36 @@ export default function PMDashboard() {
               </p>
             </div>
 
-            {/* แท็บสลับ 3 โมดูลหลัก */}
-            <div className="inline-flex p-1 bg-black/25 backdrop-blur-md rounded-2xl border border-white/15 self-start md:self-auto text-xs">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 self-start md:self-auto flex-wrap">
               <Link
-                href="/"
-                className="px-3.5 py-1.5 rounded-xl font-semibold text-white/75 hover:text-white transition-colors flex items-center gap-1.5"
+                href="/dashboard/executive-summary"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-display font-bold text-xs shadow-lg shadow-amber-500/30 active:scale-95 transition-all border border-amber-300/40"
+                title="เปิดรายงานสรุปผู้บริหาร A4 แผ่นเดียวจบสำหรับพิมพ์หรือส่งต่อ"
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span>ตรวจโครงสร้าง ITP</span>
+                <FileText className="w-4 h-4 text-slate-950" />
+                <span>📄 สรุปผู้บริหาร A4 (One-Page)</span>
               </Link>
-              <Link
-                href="/defects"
-                className="px-3.5 py-1.5 rounded-xl font-semibold text-white/75 hover:text-white transition-colors flex items-center gap-1.5"
-              >
-                <Wrench className="w-3.5 h-3.5" />
-                <span>ตรวจ Defect รายวีค</span>
-              </Link>
-              <div className="px-3.5 py-1.5 rounded-xl font-bold bg-white text-brand shadow-sm flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5" />
-                <span>แดชบอร์ด PM</span>
+
+              {/* แท็บสลับ 3 โมดูลหลัก */}
+              <div className="inline-flex p-1 bg-black/25 backdrop-blur-md rounded-2xl border border-white/15 text-xs">
+                <Link
+                  href="/"
+                  className="px-3.5 py-1.5 rounded-xl font-semibold text-white/75 hover:text-white transition-colors flex items-center gap-1.5"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>ตรวจโครงสร้าง ITP</span>
+                </Link>
+                <Link
+                  href="/defects"
+                  className="px-3.5 py-1.5 rounded-xl font-semibold text-white/75 hover:text-white transition-colors flex items-center gap-1.5"
+                >
+                  <Wrench className="w-3.5 h-3.5" />
+                  <span>ตรวจ Defect รายวีค</span>
+                </Link>
+                <div className="px-3.5 py-1.5 rounded-xl font-bold bg-white text-brand shadow-sm flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5" />
+                  <span>แดชบอร์ด PM</span>
+                </div>
               </div>
             </div>
           </div>
