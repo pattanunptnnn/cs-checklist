@@ -244,6 +244,10 @@ export interface WeeklyDefectSummary {
   criticalCount: number;
   resolutionRate: number; // % แก้เสร็จ (closed / total)
   checkInVerified: boolean;
+  checkIn?: CheckInData | null;
+  hasSelfie?: boolean;
+  selfiePhoto?: string;
+  overallNote?: string;
   savedAt: string | null;
   createdBy?: string;
   createdByName?: string;

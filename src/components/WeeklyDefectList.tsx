@@ -145,7 +145,7 @@ export default function WeeklyDefectList() {
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       list = list.filter((r) =>
-        [r.store, r.storeCode, r.contractor, r.pm]
+        [r.store, r.storeCode, r.contractor, r.pm, r.overallNote]
           .filter(Boolean)
           .some((val) => String(val).toLowerCase().includes(q))
       );
@@ -545,6 +545,26 @@ export default function WeeklyDefectList() {
                               ● วิกฤต {r.criticalCount} จุด
                             </span>
                           )}
+
+                          {r.selfiePhoto ? (
+                            <span className="chip bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25 text-[11px] font-bold inline-flex items-center gap-1">
+                              <span>📸 Selfie แล้ว</span>
+                            </span>
+                          ) : (
+                            <span className="chip bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 text-[11px] font-bold inline-flex items-center gap-1">
+                              <span>⚠️ ขาดรูป Selfie</span>
+                            </span>
+                          )}
+
+                          {r.overallNote && (r.overallNote.toLowerCase().includes("video") || r.overallNote.includes("ทางไกล") || r.overallNote.toLowerCase().includes("remote") || r.overallNote.toLowerCase().includes("conflict")) ? (
+                            <span className="chip bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[11px] font-bold inline-flex items-center gap-1">
+                              📹 <span>ตรวจทางไกล (Remote)</span>
+                            </span>
+                          ) : r.overallNote ? (
+                            <span className="chip bg-slate-500/10 text-slate-700 dark:text-slate-300 border border-slate-500/25 text-[11px] font-semibold inline-flex items-center gap-1">
+                              💬 <span>มีหมายเหตุ</span>
+                            </span>
+                          ) : null}
                         </div>
 
                         {/* ข้อมูลโครงการ */}
@@ -568,6 +588,15 @@ export default function WeeklyDefectList() {
                             </span>
                           )}
                         </div>
+
+                        {r.overallNote && (
+                          <div className="mt-2 text-xs text-ink2 bg-sunken/60 rounded-xl px-3 py-1.5 border border-line/60 flex items-start gap-2">
+                            <span className="shrink-0 text-amber-600 dark:text-amber-400 font-bold">
+                              {r.overallNote.toLowerCase().includes("video") || r.overallNote.includes("ทางไกล") || r.overallNote.toLowerCase().includes("remote") ? "📹 Remote:" : "💬 หมายเหตุ:"}
+                            </span>
+                            <span className="line-clamp-1">{r.overallNote}</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* ปุ่มจัดการลบ */}

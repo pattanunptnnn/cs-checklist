@@ -13,6 +13,7 @@ import type {
 } from "@/lib/types";
 import QRCheckIn from "./QRCheckIn";
 import PhotoUploader from "./PhotoUploader";
+import SiteSelfieModal from "./SiteSelfieModal";
 import { useAuth } from "./AuthProvider";
 import { BIGC_PMS } from "@/lib/auth";
 import {
@@ -35,7 +36,20 @@ import {
   Sparkles,
   ChevronDown,
   Filter,
+  Video,
 } from "lucide-react";
+
+function fmtShort(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("th-TH", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  } catch {
+    return iso;
+  }
+}
 
 const CATEGORIES: DefectCategory[] = [
   "โครงสร้าง",
@@ -56,7 +70,7 @@ const SEVERITIES: { id: DefectSeverity; label: string; color: string }[] = [
 
 export default function WeeklyDefectEditor({ id }: { id: string }) {
   const router = useRouter();
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const isAdmin = role === "admin";
   const [record, setRecord] = useState<WeeklyDefectRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +81,9 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
   // ฟิลเตอร์รายการในหน้านี้
   const [catFilter, setCatFilter] = useState<string>("all");
   const [statFilter, setStatFilter] = useState<string>("all");
+
+  // Modal ถ่ายภาพ Selfie ยืนยันตัวตนหน้าไซต์งาน
+  const [isSelfieModalOpen, setIsSelfieModalOpen] = useState(false);
 
   // Modal เพิ่ม Defect ใหม่
   const [showAddModal, setShowAddModal] = useState(false);
@@ -176,6 +193,57 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
       return updated;
     });
   }, [id, isAdmin]);
+
+  // บันทึกภาพถ่าย Selfie คู่หน้างานจริง
+  const handleSaveSelfie = useCallback(
+    async (photoUrl: string) => {
+      if (isAdmin) return;
+      setStatusMsg("กำลังบันทึกภาพ Selfie และข้อมูลอัตโนมัติ…");
+      const savedAt = new Date().toISOString();
+      setRecord((prev) => {
+        if (!prev) return prev;
+        const updated: WeeklyDefectRecord = {
+          ...prev,
+          savedAt,
+          checkIn: {
+            timestamp: prev.checkIn?.timestamp || new Date().toISOString(),
+            verified: true,
+            method: prev.checkIn?.method || "gps_proof",
+            inspectorName: prev.pm || prev.checkIn?.inspectorName || user?.name || "Big-C PM",
+            siteCode: prev.storeCode ? `BIGC-SITE-${prev.storeCode}` : "BIGC-SITE",
+            address: prev.store || "หน้างาน Big-C",
+            lat: prev.checkIn?.lat,
+            lng: prev.checkIn?.lng,
+            accuracy: prev.checkIn?.accuracy,
+            proofQrDataUrl: prev.checkIn?.proofQrDataUrl,
+            selfiePhoto: photoUrl,
+            selfieTimestamp: new Date().toISOString(),
+          },
+        };
+
+        fetch(`/api/defects/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updated),
+        })
+          .then((res) => {
+            if (res.ok) {
+              setDirty(false);
+              setStatusMsg(`บันทึกภาพ Selfie และข้อมูลอัตโนมัติสำเร็จ (${fmtShort(savedAt)})`);
+              setTimeout(() => setStatusMsg(""), 3000);
+            } else {
+              setDirty(true);
+            }
+          })
+          .catch(() => {
+            setDirty(true);
+          });
+
+        return updated;
+      });
+    },
+    [id, isAdmin, user?.name]
+  );
 
   // เพิ่ม Defect ข้อใหม่
   const handleAddDefect = (e: React.FormEvent) => {
@@ -404,7 +472,74 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
           checkIn={record.checkIn}
           onCheckIn={handleCheckIn}
           onClearCheckIn={handleClearCheckIn}
+          onOpenSelfie={() => setIsSelfieModalOpen(true)}
         />
+
+        {/* ────────── ส่วนหมายเหตุ / วิธีการเข้าตรวจ (Remark / Overall Note) ────────── */}
+        <div className="card p-4 space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className={`w-7 h-7 rounded-lg grid place-items-center ${
+                record.overallNote && (record.overallNote.toLowerCase().includes("video") || record.overallNote.toLowerCase().includes("remote") || record.overallNote.includes("ทางไกล"))
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                  : "bg-brand/10 text-brand"
+              }`}>
+                <Video className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-ink">หมายเหตุรอบตรวจ / วิธีการเข้าตรวจ (Remark)</span>
+                  {record.overallNote && (record.overallNote.toLowerCase().includes("video") || record.overallNote.toLowerCase().includes("remote") || record.overallNote.includes("ทางไกล")) && (
+                    <span className="chip bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+                      📹 Remote Video Call
+                    </span>
+                  )}
+                </div>
+                <span className="block text-[11px] text-ink3">
+                  กรณี PM ติด Conflict / นอกพื้นที่ และตรวจ Defect ทางไกลผ่าน Video Call ร่วมกับผู้รับเหมา
+                </span>
+              </div>
+            </div>
+
+            {!isAdmin && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10.5px] font-semibold text-ink3">เลือกด่วน:</span>
+                {[
+                  { label: "📹 Remote Video Call", text: "ตรวจ Defect ทางไกล (Remote Video Call กับผู้รับเหมา เนื่องจาก PM ติดภารกิจนอกพื้นที่)" },
+                  { label: "⚠️ ติด Conflict", text: "PM ติด Conflict นอกพื้นที่ — ตรวจรอบนี้ผ่าน Video Call และรูปถ่ายหน้างาน" },
+                  { label: "📍 ตรวจหน้างานจริง", text: "เข้าตรวจพื้นที่จริง ณ ไซต์งาน (On-Site)" },
+                ].map((preset, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setRecord((prev) => (prev ? { ...prev, overallNote: preset.text } : prev));
+                      setDirty(true);
+                    }}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-card hover:bg-brand/10 hover:text-brand border border-line text-ink2 font-medium transition-all active:scale-95 shadow-2xs"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <textarea
+            rows={2}
+            disabled={isAdmin}
+            value={record.overallNote || ""}
+            onChange={(e) => {
+              const val = e.target.value;
+              setRecord((prev) => (prev ? { ...prev, overallNote: val } : prev));
+              setDirty(true);
+            }}
+            placeholder="ระบุหมายเหตุหรือวิธีการตรวจรอบนี้ เช่น ตรวจทางไกลผ่าน Video Call ร่วมกับผู้รับเหมาหน้างาน..."
+            className={`field py-2 resize-y text-xs sm:text-sm leading-relaxed ${
+              isAdmin ? "bg-sunken opacity-80 cursor-not-allowed" : "bg-card"
+            }`}
+          />
+        </div>
 
         {/* ────────── 2. แถบสรุปตัวเลข Defect ประจำรอบนี้ ────────── */}
         <div className="card p-4">
@@ -852,6 +987,24 @@ export default function WeeklyDefectEditor({ id }: { id: string }) {
           </div>
         </div>
       )}
+      {/* Modal ถ่ายภาพ Selfie คู่หน้าไซต์งาน (บังคับ) */}
+      <SiteSelfieModal
+        isOpen={isSelfieModalOpen}
+        onClose={() => setIsSelfieModalOpen(false)}
+        storeName={record?.store}
+        storeCode={record?.storeCode}
+        pmName={record?.pm || record?.checkIn?.inspectorName}
+        coords={
+          record?.checkIn?.lat && record?.checkIn?.lng
+            ? {
+                lat: record.checkIn.lat,
+                lng: record.checkIn.lng,
+                accuracy: record.checkIn.accuracy,
+              }
+            : null
+        }
+        onSaveSelfie={handleSaveSelfie}
+      />
     </div>
   );
 }
