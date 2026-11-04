@@ -144,6 +144,7 @@ export interface PMSiteVisit {
   passCount: number;
   failCount: number;
   approvalStatus: string;
+  remark?: string;
 }
 
 // สรุปสถิติ Performance ของ PM แต่ละคน

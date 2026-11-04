@@ -42,6 +42,7 @@ import {
   Sparkles,
   Search,
   PauseCircle,
+  Video,
 } from "lucide-react";
 
 const TOTAL = totalItems();
@@ -808,6 +809,11 @@ export default function RecordEditor({ id }: { id: string }) {
                 <span className="chip bg-brand/10 text-brand text-[11px] font-bold">
                   {projectFilled}/{checklist.projectFields.length} ช่อง
                 </span>
+                {record.project.remark && (
+                  <span className="chip bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-[10.5px] font-bold inline-flex items-center gap-1">
+                    📹 {record.project.remark.toLowerCase().includes("remote") || record.project.remark.toLowerCase().includes("video") || record.project.remark.includes("ทางไกล") || record.project.remark.includes("วิดีโอ") ? "ตรวจ Remote Video Call" : "มีหมายเหตุ"}
+                  </span>
+                )}
               </div>
               <span className="tnum block text-xs text-ink2 mt-0.5">
                 {record.project.store || "ระบุชื่อสาขา"}, {record.project.storeCode || "รหัสสาขา"}, {record.project.contractor || "ผู้รับเหมา"}
@@ -821,6 +827,88 @@ export default function RecordEditor({ id }: { id: string }) {
           {openProject && (
             <div className="px-4 sm:px-5 pb-5 pt-3 border-t border-line/70 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 bg-card">
               {checklist.projectFields.map(([key, label]) => {
+                if (key === "remark") {
+                  const val = record.project[key] || "";
+                  const isRemote =
+                    val.toLowerCase().includes("video") ||
+                    val.toLowerCase().includes("remote") ||
+                    val.includes("ทางไกล") ||
+                    val.includes("วิดีโอ") ||
+                    val.toLowerCase().includes("conflict");
+
+                  return (
+                    <div
+                      key={key}
+                      className="col-span-1 sm:col-span-2 lg:col-span-3 rounded-2xl bg-sunken/60 p-3.5 sm:p-4 border border-line/80 space-y-2.5 transition-all focus-within:border-brand/40"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-7 h-7 rounded-lg grid place-items-center ${isRemote ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-brand/10 text-brand"}`}>
+                            <Video className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-ink">{label}</span>
+                              {isRemote && (
+                                <span className="chip bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+                                  📹 Remote Video Call
+                                </span>
+                              )}
+                            </div>
+                            <span className="block text-[11px] text-ink3">
+                              กรณี PM ติด Conflict / ติดงานนอกพื้นที่ และใช้วิธีตรวจทางไกลผ่าน Video Call ร่วมกับผู้รับเหมา
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Quick Presets */}
+                        {!isAdmin && (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10.5px] font-semibold text-ink3">เลือกด่วน:</span>
+                            {[
+                              { label: "📹 Remote Video Call", text: "ตรวจทางไกล (Remote Video Call กับผู้รับเหมา เนื่องจาก PM ติดภารกิจนอกพื้นที่)" },
+                              { label: "⚠️ ติด Conflict", text: "PM ติด Conflict นอกพื้นที่ — ดำเนินการตรวจทางไกลร่วมกับผู้รับเหมาหน้างาน" },
+                              { label: "📍 ตรวจหน้างานจริง", text: "เข้าตรวจพื้นที่จริง ณ ไซต์งาน (On-Site)" },
+                            ].map((preset, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => updateProject(key, preset.text)}
+                                className="text-[11px] px-2.5 py-1 rounded-lg bg-card hover:bg-brand/10 hover:text-brand border border-line text-ink2 font-medium transition-all active:scale-95 shadow-2xs"
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="relative">
+                        <textarea
+                          id={`project-${key}`}
+                          rows={2}
+                          disabled={isAdmin}
+                          value={val}
+                          onChange={(e) => updateProject(key, e.target.value)}
+                          placeholder="ระบุหมายเหตุหรือวิธีการเข้าตรวจ เช่น PM ติด conflict นอกพื้นที่ ใช้วิธี Remote ตรวจสอบผ่าน Video Call ร่วมกับผู้รับเหมาหน้างาน..."
+                          className={`field py-2 resize-y text-xs sm:text-sm leading-relaxed ${
+                            isAdmin ? "bg-sunken opacity-80 cursor-not-allowed" : "bg-card"
+                          } ${isRemote ? "border-amber-500/50 focus:border-amber-500" : ""}`}
+                        />
+                      </div>
+
+                      {isRemote && (
+                        <div className="flex items-center gap-2 text-[11.5px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-xl font-medium">
+                          <span className="text-sm">💡</span>
+                          <span>
+                            <strong>บันทึกโหมด Remote Video Call:</strong> ข้อมูลนี้จะแสดงเป็นป้ายกำกับในรายการใบตรวจ เพื่อให้ผู้บังคับบัญชารับทราบวิธีการตรวจ
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 if (key === "pm") {
                   return (
                     <label key={key} className="block">

@@ -89,7 +89,7 @@ export default function RecordList() {
     if (!needle) return list;
     return list.filter((r) => {
       const p = r.project || {};
-      return [p.store, p.storeCode, p.contractor, p.pm]
+      return [p.store, p.storeCode, p.contractor, p.pm, p.remark]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(needle));
     });
@@ -453,6 +453,15 @@ export default function RecordList() {
                             <span>⚠️ ขาดรูป Selfie</span>
                           </span>
                         )}
+                        {p.remark && (p.remark.toLowerCase().includes("video") || p.remark.includes("ทางไกล") || p.remark.toLowerCase().includes("remote") || p.remark.toLowerCase().includes("conflict") || p.remark.includes("วิดีโอ")) ? (
+                          <span className="chip bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[11px] font-bold inline-flex items-center gap-1">
+                            📹 <span>ตรวจทางไกล (Remote)</span>
+                          </span>
+                        ) : p.remark ? (
+                          <span className="chip bg-slate-500/10 text-slate-700 dark:text-slate-300 border border-slate-500/25 text-[11px] font-semibold inline-flex items-center gap-1">
+                            💬 <span>มีหมายเหตุ</span>
+                          </span>
+                        ) : null}
                       </div>
 
                       <div className="flex items-center gap-3 text-[13px] text-ink2 mt-1.5 flex-wrap">
@@ -475,6 +484,15 @@ export default function RecordList() {
                           </span>
                         )}
                       </div>
+
+                      {p.remark && (
+                        <div className="mt-2 text-xs text-ink2 bg-sunken/60 rounded-xl px-3 py-1.5 border border-line/60 flex items-start gap-2">
+                          <span className="shrink-0 text-amber-600 dark:text-amber-400 font-bold">
+                            {p.remark.toLowerCase().includes("video") || p.remark.includes("ทางไกล") || p.remark.toLowerCase().includes("remote") || p.remark.includes("วิดีโอ") ? "📹 Remote:" : "💬 หมายเหตุ:"}
+                          </span>
+                          <span className="line-clamp-1">{p.remark}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* ปุ่มจัดการลบ */}

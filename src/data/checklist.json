@@ -41,6 +41,10 @@
     [
       "drawing",
       "เลขที่แบบอ้างอิง (Drawing Ref.)"
+    ],
+    [
+      "remark",
+      "หมายเหตุ / วิธีการเข้าตรวจ (Remark)"
     ]
   ],
   "sections": [

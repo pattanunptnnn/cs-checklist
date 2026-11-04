@@ -214,6 +214,7 @@ export default function PMDashboard() {
         passCount: r.pass,
         failCount: r.fail,
         approvalStatus: r.approvalStatus || "รอตรวจ",
+        remark: p.remark,
       };
     });
   }, [records]);
@@ -1241,6 +1242,16 @@ export default function PMDashboard() {
                               ⚠️ ขาด Selfie
                             </span>
                           )}
+
+                          {v.remark && (v.remark.toLowerCase().includes("video") || v.remark.includes("ทางไกล") || v.remark.toLowerCase().includes("remote") || v.remark.toLowerCase().includes("conflict") || v.remark.includes("วิดีโอ")) ? (
+                            <span className="chip bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10.5px] font-bold">
+                              📹 ตรวจทางไกล (Remote Video Call)
+                            </span>
+                          ) : v.remark ? (
+                            <span className="chip bg-slate-500/10 text-slate-700 dark:text-slate-300 border border-slate-500/25 text-[10.5px] font-semibold">
+                              💬 มีหมายเหตุ
+                            </span>
+                          ) : null}
                         </div>
 
                         <div className="flex items-center gap-3 text-xs text-ink2 mt-1.5 flex-wrap">
@@ -1286,6 +1297,15 @@ export default function PMDashboard() {
                             </a>
                           )}
                         </div>
+
+                        {v.remark && (
+                          <div className="mt-2 text-xs bg-amber-500/5 text-ink2 p-2 rounded-lg border border-amber-500/20 flex items-start gap-1.5">
+                            <span className="shrink-0 text-amber-600 dark:text-amber-400 font-bold">
+                              {v.remark.toLowerCase().includes("video") || v.remark.includes("ทางไกล") || v.remark.toLowerCase().includes("remote") || v.remark.includes("วิดีโอ") ? "📹 บันทึก Remote:" : "💬 หมายเหตุ:"}
+                            </span>
+                            <span>{v.remark}</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* สถิติงานตรวจ & ปุ่มเปิด */}
