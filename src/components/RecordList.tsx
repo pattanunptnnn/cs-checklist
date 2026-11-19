@@ -80,7 +80,7 @@ export default function RecordList() {
   const pmScopedRows = useMemo(() => {
     if (!rows) return null;
     if (!user || role === "admin" || role === "supervisor") return rows;
-    return rows.filter((r) => isRecordOwnedByPm(r.project?.pm, (r as any).createdBy || r.project?.createdBy, user));
+    return rows.filter((r) => isRecordOwnedByPm(r.project?.pm || r.checkIn?.inspectorName, (r as any).createdBy || r.project?.createdBy, user));
   }, [rows, user, role]);
 
   const shown = useMemo(() => {

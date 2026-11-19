@@ -186,7 +186,7 @@ export default function PMDashboard() {
       const pmName = matchPmName(rawPmName);
       const scheduledDate = p.inspDate || "";
       const checkInTimestamp = r.checkIn?.timestamp || null;
-      const verified = Boolean(r.checkInVerified && r.checkIn?.verified);
+      const verified = Boolean(r.checkInVerified || r.checkIn?.verified);
 
       const { status: punctuality, note: punctualityNote } = evaluatePunctuality(
         scheduledDate,
@@ -196,8 +196,8 @@ export default function PMDashboard() {
 
       return {
         recordId: r.id,
-        storeName: p.store || "(ยังไม่ระบุชื่อสาขา)",
-        storeCode: p.storeCode || "-",
+        storeName: p.store || p.storeName || r.checkIn?.address || "(ยังไม่ระบุชื่อสาขา)",
+        storeCode: p.storeCode || r.checkIn?.siteCode || "-",
         contractor: p.contractor || "ผู้รับเหมาทั่วไป",
         pmName,
         scheduledDate,

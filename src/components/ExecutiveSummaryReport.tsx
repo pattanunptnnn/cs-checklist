@@ -72,14 +72,15 @@ export default function ExecutiveSummaryReport() {
 
     // สถิติ PM Performance
     const pmRows = BIGC_PMS.map((pm) => {
-      const pmRecs = recs.filter(
-        (r) =>
-          r.project?.pm &&
-          (r.project.pm.includes(pm.name) || pm.name.includes(r.project.pm))
-      );
-      const pmDefs = defs.filter(
-        (d) => d.pm && (d.pm.includes(pm.name) || pm.name.includes(d.pm))
-      );
+      const cleanPm = pm.name.toLowerCase().replace(/^k\.\s*/i, "").trim();
+      const pmRecs = recs.filter((r) => {
+        const raw = (r.project?.pm || r.checkIn?.inspectorName || "").toLowerCase().replace(/^k\.\s*/i, "").trim();
+        return raw && (raw.includes(cleanPm) || cleanPm.includes(raw));
+      });
+      const pmDefs = defs.filter((d) => {
+        const raw = (d.pm || d.checkIn?.inspectorName || "").toLowerCase().replace(/^k\.\s*/i, "").trim();
+        return raw && (raw.includes(cleanPm) || cleanPm.includes(raw));
+      });
 
       const sitesCount = pmRecs.length;
       const verifiedCount = pmRecs.filter((r) => r.checkInVerified || Boolean(r.checkIn?.verified)).length;

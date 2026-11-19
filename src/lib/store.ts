@@ -36,24 +36,68 @@ function calculateSummary(rec: InspectionRecord): { pass: number; fail: number; 
   return { pass, fail, filled };
 }
 
+// Cache สำหรับเก็บผลลัพธ์เพื่อประสิทธิภาพสูง ไม่โหลดซ้ำซ้อน
+let cachedRecords: { data: RecordSummary[]; timestamp: number } | null = null;
+const CACHE_TTL_MS = 15000; // แคช 15 วินาที
+
+export function invalidateRecordsCache() {
+  cachedRecords = null;
+}
+
 // ------------------------------------------------------------
-// 1. อ่านรายการใบตรวจทั้งหมด
+// 1. อ่านรายการใบตรวจทั้งหมด (ครบทุกใบ ไม่ตัดทอน)
 // ------------------------------------------------------------
 export async function listRecords(): Promise<RecordSummary[]> {
+  if (cachedRecords && Date.now() - cachedRecords.timestamp < CACHE_TTL_MS) {
+    return cachedRecords.data;
+  }
+
   const supabase = getSupabase();
 
   if (supabase) {
     try {
-      // 1. ดึง 40 รายการล่าสุดพร้อมผลตรวจ items (คำนวณ pass/fail/filled)
-      const { data, error } = await supabase
-        .from("inspection_records")
-        .select("id, project, items, check_in, approval_status, saved_at, created_at")
-        .order("created_at", { ascending: false })
-        .limit(40);
+      const pageSize = 45;
+      const allRows: any[] = [];
+      let page = 0;
+      const maxPages = 20;
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const validRows = data.filter((row: any) => row.id && !String(row.id).startsWith("system_"));
-        return validRows.map((row: any) => {
+      while (page < maxPages) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+
+        // ดึงทีละชุดเพื่อป้องกัน Supabase Statement Timeout
+        const { data, error } = await supabase
+          .from("inspection_records")
+          .select("id, project, items, check_in, approval_status, saved_at, created_at")
+          .order("created_at", { ascending: false })
+          .range(from, to);
+
+        if (error) {
+          console.warn(`Supabase listRecords chunk ${page} error, trying lightweight:`, error.message);
+          const { data: lightData, error: lightError } = await supabase
+            .from("inspection_records")
+            .select("id, project, check_in, approval_status, saved_at, created_at")
+            .order("created_at", { ascending: false })
+            .range(from, to);
+
+          if (!lightError && Array.isArray(lightData) && lightData.length > 0) {
+            allRows.push(...lightData);
+            if (lightData.length < pageSize) break;
+            page++;
+            continue;
+          }
+          break;
+        }
+
+        if (!data || data.length === 0) break;
+        allRows.push(...data);
+        if (data.length < pageSize) break;
+        page++;
+      }
+
+      if (allRows.length > 0) {
+        const validRows = allRows.filter((row: any) => row.id && !String(row.id).startsWith("system_"));
+        const results: RecordSummary[] = validRows.map((row: any) => {
           const rec: InspectionRecord = {
             id: row.id,
             project: row.project || {},
@@ -63,44 +107,28 @@ export async function listRecords(): Promise<RecordSummary[]> {
             savedAt: row.saved_at || null,
           };
           const { pass, fail, filled } = calculateSummary(rec);
+          const p = rec.project || {};
+          const finalPass = pass > 0 ? pass : Number(p.passCount || p.pass || 0);
+          const finalFail = fail > 0 ? fail : Number(p.failCount || p.fail || 0);
+          const finalFilled = filled > 0 ? filled : Number(p.filledCount || p.filled || (finalPass + finalFail));
+
           return {
             id: rec.id,
             project: rec.project,
             savedAt: rec.savedAt,
-            pass,
-            fail,
-            filled,
+            pass: finalPass,
+            fail: finalFail,
+            filled: finalFilled,
             approvalStatus: rec.approvalStatus,
-            checkInVerified: Boolean(rec.checkIn?.verified),
-            checkIn: rec.checkIn,
-            hasSelfie: Boolean(rec.checkIn?.selfiePhoto),
-            selfiePhoto: rec.checkIn?.selfiePhoto,
+            checkInVerified: Boolean(row.check_in?.verified),
+            checkIn: row.check_in || null,
+            hasSelfie: Boolean(row.check_in?.selfiePhoto),
+            selfiePhoto: row.check_in?.selfiePhoto,
           };
         });
-      }
 
-      // 2. หากรายการมีขนาดใหญ่จนติด timeout ให้ดึงแบบ lightweight (ไม่รวม items) เพื่อให้แสดงผลได้เสมอ
-      const { data: lightData, error: lightError } = await supabase
-        .from("inspection_records")
-        .select("id, project, check_in, approval_status, saved_at, created_at")
-        .order("created_at", { ascending: false })
-        .limit(60);
-
-      if (!lightError && Array.isArray(lightData) && lightData.length > 0) {
-        const validRows = lightData.filter((row: any) => row.id && !String(row.id).startsWith("system_"));
-        return validRows.map((row: any) => ({
-          id: row.id,
-          project: row.project || {},
-          savedAt: row.saved_at || null,
-          pass: 0,
-          fail: 0,
-          filled: 0,
-          approvalStatus: row.approval_status || "รอตรวจ",
-          checkInVerified: Boolean(row.check_in?.verified),
-          checkIn: row.check_in || null,
-          hasSelfie: Boolean(row.check_in?.selfiePhoto),
-          selfiePhoto: row.check_in?.selfiePhoto,
-        }));
+        cachedRecords = { data: results, timestamp: Date.now() };
+        return results;
       }
     } catch (e) {
       console.warn("Supabase listRecords failed, falling back to local files:", e);
@@ -232,6 +260,8 @@ export async function createRecord(rec: Partial<InspectionRecord>): Promise<stri
     // ignore local write failure
   }
 
+  // ล้างแคชเพื่อให้ดึงข้อมูลใหม่ทันที
+  invalidateRecordsCache();
   return id;
 }
 
@@ -282,6 +312,9 @@ export async function saveRecord(id: string, rec: Partial<InspectionRecord>): Pr
   } catch {
     // ignore
   }
+
+  // ล้างแคช
+  invalidateRecordsCache();
 }
 
 // ------------------------------------------------------------
@@ -302,4 +335,7 @@ export async function deleteRecord(id: string): Promise<void> {
   } catch {
     // ignore if file doesn't exist
   }
+
+  // ล้างแคช
+  invalidateRecordsCache();
 }
