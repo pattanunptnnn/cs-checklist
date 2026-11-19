@@ -43,21 +43,55 @@ function summarizeDefects(defects: any[] = []) {
   };
 }
 
+// Cache สำหรับเก็บผลลัพธ์เพื่อประสิทธิภาพสูง
+let cachedWeeklyRecords: { data: WeeklyDefectSummary[]; timestamp: number } | null = null;
+const CACHE_TTL_MS = 15000;
+
+export function invalidateWeeklyCache() {
+  cachedWeeklyRecords = null;
+}
+
 // ------------------------------------------------------------
-// 1. อ่านรายการรอบตรวจ Defect ทั้งหมด
+// 1. อ่านรายการรอบตรวจ Defect ทั้งหมด (ครบทุกรายการ ไม่ติด timeout)
 // ------------------------------------------------------------
 export async function listWeeklyRecords(): Promise<WeeklyDefectSummary[]> {
+  if (cachedWeeklyRecords && Date.now() - cachedWeeklyRecords.timestamp < CACHE_TTL_MS) {
+    return cachedWeeklyRecords.data;
+  }
+
   const supabase = getSupabase();
 
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from("weekly_defects")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const pageSize = 15;
+      const allRows: any[] = [];
+      let page = 0;
+      const maxPages = 15;
 
-      if (!error && Array.isArray(data)) {
-        return data.map((row: any) => {
+      while (page < maxPages) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+
+        // ดึงทีละ 15 รายการเพื่อป้องกัน Supabase Statement Timeout
+        const { data, error } = await supabase
+          .from("weekly_defects")
+          .select("id, store, store_code, week_number, week_title, insp_date, contractor, pm, check_in, defects, overall_note, saved_at, created_at")
+          .order("created_at", { ascending: false })
+          .range(from, to);
+
+        if (error) {
+          console.warn(`Supabase listWeeklyRecords chunk ${page} error:`, error.message);
+          break;
+        }
+
+        if (!data || data.length === 0) break;
+        allRows.push(...data);
+        if (data.length < pageSize) break;
+        page++;
+      }
+
+      if (allRows.length > 0) {
+        const results: WeeklyDefectSummary[] = allRows.map((row: any) => {
           const defects = row.defects || [];
           const stats = summarizeDefects(defects);
           return {
@@ -73,12 +107,13 @@ export async function listWeeklyRecords(): Promise<WeeklyDefectSummary[]> {
             checkIn: row.check_in || null,
             hasSelfie: Boolean(row.check_in?.selfiePhoto),
             selfiePhoto: row.check_in?.selfiePhoto || undefined,
-            overallNote: row.overall_note || row.overallNote || undefined,
+            overallNote: row.overall_note || undefined,
             savedAt: row.saved_at || null,
-            createdBy: row.created_by || row.createdBy,
-            createdByName: row.created_by_name || row.createdByName,
           };
         });
+
+        cachedWeeklyRecords = { data: results, timestamp: Date.now() };
+        return results;
       }
     } catch (e) {
       console.warn("Supabase listWeeklyRecords failed, falling back to local files:", e);
@@ -230,6 +265,8 @@ export async function createWeeklyRecord(data: Partial<WeeklyDefectRecord>): Pro
     // ignore
   }
 
+  // ล้างแคช
+  invalidateWeeklyCache();
   return id;
 }
 
@@ -273,6 +310,9 @@ export async function saveWeeklyRecord(record: WeeklyDefectRecord): Promise<void
   } catch {
     // ignore
   }
+
+  // ล้างแคช
+  invalidateWeeklyCache();
 }
 
 // ------------------------------------------------------------
@@ -293,4 +333,7 @@ export async function deleteWeeklyRecord(id: string): Promise<void> {
   } catch {
     // ignore
   }
+
+  // ล้างแคช
+  invalidateWeeklyCache();
 }
