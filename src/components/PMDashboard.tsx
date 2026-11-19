@@ -68,6 +68,8 @@ export interface UnifiedInspection {
   criticalCount?: number;
   approvalStatus: string;
   remark?: string;
+  photoCount?: number;
+  hasPhotos?: boolean;
   linkUrl: string;
 }
 
@@ -262,6 +264,8 @@ export default function PMDashboard() {
         failCount: r.fail,
         approvalStatus: r.approvalStatus || "รอตรวจ",
         remark: p.remark,
+        photoCount: r.photoCount,
+        hasPhotos: r.hasPhotos,
       };
     });
   }, [records]);
@@ -508,6 +512,8 @@ export default function PMDashboard() {
         filledCount: v.filledCount,
         approvalStatus: v.approvalStatus || "รอตรวจ",
         remark: v.remark,
+        photoCount: v.photoCount,
+        hasPhotos: v.hasPhotos,
         linkUrl: `/record/${v.recordId}`,
       });
     }
@@ -556,6 +562,8 @@ export default function PMDashboard() {
         criticalCount: w.criticalCount || 0,
         approvalStatus: pendingCount === 0 ? "แก้ไขครบถ้วน" : "รอผู้รับเหมาแก้ไข",
         remark: w.overallNote,
+        photoCount: w.photoCount,
+        hasPhotos: w.hasPhotos,
         linkUrl: `/defects/${w.id}`,
       });
     }
@@ -664,6 +672,15 @@ export default function PMDashboard() {
             </div>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 self-start md:self-auto flex-wrap">
+              <Link
+                href="/dashboard/pm-report"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 hover:from-red-500 hover:to-rose-500 text-white font-display font-bold text-xs shadow-lg shadow-red-500/30 active:scale-95 transition-all border border-red-300/40"
+                title="ออกรายงาน PDF ตรวจสอบ PM, การเช็คอิน, Selfie, แนบรูปผลตรวจ และ Defect พร้อมชื่อสาขา"
+              >
+                <FileText className="w-4 h-4 text-white" />
+                <span>📑 ออกรายงานสรุป PM & แนบรูป (PDF)</span>
+              </Link>
+
               <Link
                 href="/dashboard/executive-summary"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-display font-bold text-xs shadow-lg shadow-amber-500/30 active:scale-95 transition-all border border-amber-300/40"

@@ -118,6 +118,8 @@ export interface RecordSummary {
   checkIn?: CheckInData | null;
   hasSelfie?: boolean;
   selfiePhoto?: string;
+  photoCount?: number;
+  hasPhotos?: boolean;
 }
 
 // สถานะความตรงต่อเวลา
@@ -145,6 +147,8 @@ export interface PMSiteVisit {
   failCount: number;
   approvalStatus: string;
   remark?: string;
+  photoCount?: number;
+  hasPhotos?: boolean;
 }
 
 // สรุปสถิติ Performance ของ PM แต่ละคน
@@ -251,6 +255,8 @@ export interface WeeklyDefectSummary {
   savedAt: string | null;
   createdBy?: string;
   createdByName?: string;
+  photoCount?: number;
+  hasPhotos?: boolean;
 }
 
 // ============================================================

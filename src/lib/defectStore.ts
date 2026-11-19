@@ -94,6 +94,11 @@ export async function listWeeklyRecords(): Promise<WeeklyDefectSummary[]> {
         const results: WeeklyDefectSummary[] = allRows.map((row: any) => {
           const defects = row.defects || [];
           const stats = summarizeDefects(defects);
+          let defectPhotoCount = 0;
+          for (const d of defects) {
+            if (Array.isArray(d.beforePhotos)) defectPhotoCount += d.beforePhotos.length;
+            if (Array.isArray(d.afterPhotos)) defectPhotoCount += d.afterPhotos.length;
+          }
           return {
             id: row.id,
             store: row.store || "(ยังไม่ระบุชื่อสาขา)",
@@ -109,6 +114,8 @@ export async function listWeeklyRecords(): Promise<WeeklyDefectSummary[]> {
             selfiePhoto: row.check_in?.selfiePhoto || undefined,
             overallNote: row.overall_note || undefined,
             savedAt: row.saved_at || null,
+            photoCount: defectPhotoCount,
+            hasPhotos: defectPhotoCount > 0,
           };
         });
 
@@ -131,6 +138,11 @@ export async function listWeeklyRecords(): Promise<WeeklyDefectSummary[]> {
         const rec = JSON.parse(await fs.readFile(path.join(DIR, f), "utf8")) as WeeklyDefectRecord;
         const defects = rec.defects || [];
         const stats = summarizeDefects(defects);
+        let defectPhotoCount = 0;
+        for (const d of defects) {
+          if (Array.isArray(d.beforePhotos)) defectPhotoCount += d.beforePhotos.length;
+          if (Array.isArray(d.afterPhotos)) defectPhotoCount += d.afterPhotos.length;
+        }
 
         rows.push({
           id: f.replace(/\.json$/, ""),
@@ -149,6 +161,8 @@ export async function listWeeklyRecords(): Promise<WeeklyDefectSummary[]> {
           savedAt: rec.savedAt || null,
           createdBy: rec.createdBy,
           createdByName: rec.createdByName,
+          photoCount: defectPhotoCount,
+          hasPhotos: defectPhotoCount > 0,
         });
       } catch {
         // ข้ามไฟล์เสีย

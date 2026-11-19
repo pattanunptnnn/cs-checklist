@@ -18,6 +18,7 @@ import {
   Layers,
   Wrench,
   Users,
+  FileText,
 } from "lucide-react";
 
 export default function ExecutiveSummaryReport() {
@@ -181,6 +182,15 @@ export default function ExecutiveSummaryReport() {
         </Link>
 
         <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/pm-report"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 shadow-sm transition-all"
+            title="เปิดรายงานฉบับเต็มระบุรายชื่อสาขา และสถิติการแนบรูปภาพรายบุคคล PM"
+          >
+            <FileText className="w-4 h-4 text-brand" />
+            <span>📑 รายงาน PM รายสาขา (PDF)</span>
+          </Link>
+
           <button
             type="button"
             onClick={() => window.print()}

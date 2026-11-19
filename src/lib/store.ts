@@ -112,6 +112,14 @@ export async function listRecords(): Promise<RecordSummary[]> {
           const finalFail = fail > 0 ? fail : Number(p.failCount || p.fail || 0);
           const finalFilled = filled > 0 ? filled : Number(p.filledCount || p.filled || (finalPass + finalFail));
 
+          let photoCount = 0;
+          if (rec.items && typeof rec.items === "object") {
+            for (const k of Object.keys(rec.items)) {
+              const pArr = (rec.items as any)[k]?.photos;
+              if (Array.isArray(pArr)) photoCount += pArr.length;
+            }
+          }
+
           return {
             id: rec.id,
             project: rec.project,
@@ -124,6 +132,8 @@ export async function listRecords(): Promise<RecordSummary[]> {
             checkIn: row.check_in || null,
             hasSelfie: Boolean(row.check_in?.selfiePhoto),
             selfiePhoto: row.check_in?.selfiePhoto,
+            photoCount,
+            hasPhotos: photoCount > 0,
           };
         });
 
@@ -145,6 +155,13 @@ export async function listRecords(): Promise<RecordSummary[]> {
       try {
         const rec = JSON.parse(await fs.readFile(path.join(DIR, f), "utf8")) as InspectionRecord;
         const { pass, fail, filled } = calculateSummary(rec);
+        let photoCount = 0;
+        if (rec.items && typeof rec.items === "object") {
+          for (const k of Object.keys(rec.items)) {
+            const pArr = (rec.items as any)[k]?.photos;
+            if (Array.isArray(pArr)) photoCount += pArr.length;
+          }
+        }
         rows.push({
           id: f.replace(/\.json$/, ""),
           project: rec.project || {},
@@ -157,6 +174,8 @@ export async function listRecords(): Promise<RecordSummary[]> {
           checkIn: rec.checkIn || null,
           hasSelfie: Boolean(rec.checkIn?.selfiePhoto),
           selfiePhoto: rec.checkIn?.selfiePhoto,
+          photoCount,
+          hasPhotos: photoCount > 0,
         });
       } catch {
         // ข้ามไฟล์ที่เสีย
