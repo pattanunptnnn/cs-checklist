@@ -227,21 +227,26 @@ export default function PMDashboard() {
         verified
       );
 
-      // Smart branch name fallback
+      // Smart branch name fallback (ไม่ให้ยุบเป็นรหัส DEMO ซ้ำกัน)
       let storeName = p.store || p.storeName || p.branch || "";
       if (!storeName) {
         if (r.checkIn?.address && r.checkIn.address !== "หน้างาน Big-C Mini") {
           storeName = r.checkIn.address;
-        } else if (p.storeCode || r.checkIn?.siteCode) {
-          storeName = `บิ๊กซี มินิ (${p.storeCode || r.checkIn?.siteCode})`;
+        } else if (p.storeCode && p.storeCode !== "BIGC-SITE-DEMO") {
+          storeName = `บิ๊กซี มินิ (รหัส ${p.storeCode})`;
         } else if (r.checkIn?.lat && r.checkIn?.lng) {
           storeName = `บิ๊กซี มินิ (พิกัด ${r.checkIn.lat.toFixed(4)}, ${r.checkIn.lng.toFixed(4)})`;
         } else {
-          storeName = "บิ๊กซี มินิ (รอระบุชื่อสาขา)";
+          storeName = `บิ๊กซี มินิ (ใบงาน #${r.id.slice(0, 8)})`;
         }
       }
 
-      const storeCode = p.storeCode || r.checkIn?.siteCode || "-";
+      const storeCode =
+        p.storeCode && p.storeCode !== "BIGC-SITE-DEMO"
+          ? p.storeCode
+          : r.checkIn?.siteCode && r.checkIn.siteCode !== "BIGC-SITE-DEMO"
+          ? r.checkIn.siteCode
+          : "-";
 
       return {
         recordId: r.id,
@@ -321,13 +326,24 @@ export default function PMDashboard() {
       const weeklyRoundsCount = pmDefectRounds.length;
       const totalDefectsAll = totalFailed + weeklyDefectsTotal;
 
+      const visitsWithPhotos = visits.filter((v) => (v.photoCount || 0) > 0).length;
+      const defectWithPhotos = pmDefectRounds.filter((w) => (w.photoCount || 0) > 0).length;
+      const totalInspectionsWithPhotos = visitsWithPhotos + defectWithPhotos;
+
       const maxPossibleItems = totalSites * TOTAL;
-      const completionRate = maxPossibleItems > 0 ? Math.round((totalFilled / maxPossibleItems) * 100) : 0;
+      // กฎสำคัญ: ถ้าไม่มีรูปถ่ายว่าตรวจจริง ต้องขึ้น 0% ไม่ใช่ 100%
+      const baseCompletion = maxPossibleItems > 0 ? Math.round((totalFilled / maxPossibleItems) * 100) : 0;
+      const completionRate = totalInspectionsWithPhotos > 0 ? baseCompletion : 0;
 
       // คำนวณคะแนนประสิทธิภาพ Performance Score (0 - 100)
       let score = 0;
       if (totalSites > 0 || weeklyRoundsCount > 0) {
-        score = Math.round(onTimeRate * 0.35 + verificationRate * 0.35 + completionRate * 0.2 + (totalDefectsAll > 0 ? 10 : 5));
+        score = Math.round(
+          onTimeRate * 0.35 +
+            verificationRate * 0.35 +
+            completionRate * 0.2 +
+            (totalInspectionsWithPhotos > 0 ? 10 : 0)
+        );
         score = Math.min(100, Math.max(0, score));
       }
 
@@ -506,7 +522,8 @@ export default function PMDashboard() {
         siteCode: v.siteCode,
         punctuality: v.punctuality,
         punctualityNote: v.punctualityNote,
-        completionRate: Math.round((v.filledCount / TOTAL) * 100),
+        // กฎสำคัญ: ถ้าไม่มีรูปถ่ายว่าตรวจจริง ต้องขึ้น 0% ไม่ใช่ 100%
+        completionRate: (v.photoCount || 0) > 0 ? Math.round((v.filledCount / TOTAL) * 100) : 0,
         passCount: v.passCount,
         failCount: v.failCount,
         filledCount: v.filledCount,
@@ -532,7 +549,9 @@ export default function PMDashboard() {
       const pendingCount = (w.openCount || 0) + (w.inProgressCount || 0);
       const doneCount = (w.closedCount || 0) + (w.resolvedCount || 0);
       const totalDef = w.totalDefects || 0;
-      const compRate = totalDef > 0 ? Math.round((doneCount / totalDef) * 100) : 100;
+      // กฎสำคัญ: ถ้าไม่มีรูปถ่ายว่าตรวจจริง ต้องขึ้น 0% ไม่ใช่ 100%
+      const compRate =
+        (w.photoCount || 0) > 0 ? (totalDef > 0 ? Math.round((doneCount / totalDef) * 100) : 100) : 0;
 
       list.push({
         id: w.id,

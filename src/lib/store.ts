@@ -56,7 +56,7 @@ export async function listRecords(): Promise<RecordSummary[]> {
 
   if (supabase) {
     try {
-      const pageSize = 45;
+      const pageSize = 25;
       const allRows: any[] = [];
       let page = 0;
       const maxPages = 20;

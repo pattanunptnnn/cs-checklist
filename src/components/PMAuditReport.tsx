@@ -22,6 +22,7 @@ import {
   Search,
   ExternalLink,
   ChevronDown,
+  XCircle,
 } from "lucide-react";
 
 // แปลงชื่อ PM ให้ตรงกับรายชื่อมาตรฐาน Big-C
@@ -86,6 +87,8 @@ interface StoreItemInspection {
   defectCount: number;
   hasDefectPhotos: boolean;
   defectPhotoCount: number;
+  // ผลการตรวจจริง: ถ้าไม่มีรูปถ่ายตรวจ ต้องขึ้น 0% ไม่ใช่ 100%
+  completionRate: number;
   statusLabel: string;
   remark?: string;
 }
@@ -95,6 +98,8 @@ interface PMAuditData {
   zone: string;
   // Total visits/records
   totalInspections: number;
+  itpCount: number;
+  weeklyCount: number;
   // Unique store count
   uniqueStoresCount: number;
   // Check-in
@@ -103,9 +108,9 @@ interface PMAuditData {
   // Selfie
   selfieCount: number;
   selfieRate: number;
-  // Actual inspection with attached photos
+  // Actual inspection with attached photos (หลักฐานการตรวจจริง)
   inspectedWithPhotosCount: number;
-  inspectedWithPhotosRate: number;
+  inspectedWithPhotosRate: number; // % สาขาที่มีรูปตรวจจริง
   totalInspectionPhotos: number;
   // Defect branches & points
   defectBranchesCount: number;
@@ -143,7 +148,7 @@ export default function PMAuditReport() {
     })();
   }, []);
 
-  // รวมและคำนวณข้อมูลตามรายชื่อ PM
+  // รวมและคำนวณข้อมูลตามรายชื่อ PM ให้ครบทุกรายการในฐานข้อมูล (ทั้ง ITP และ Weekly Defect)
   const pmAuditList = useMemo<PMAuditData[]>(() => {
     const recs = records || [];
     const defs = weeklyDefects || [];
@@ -151,34 +156,46 @@ export default function PMAuditReport() {
     // แผนที่เก็บข้อมูลของแต่ละ PM
     const pmMap = new Map<string, StoreItemInspection[]>();
 
-    // เริ่มต้นใส่ PM ทางการทั้ง 7 ท่านเสมอ
+    // 1. เริ่มต้นใส่ PM ทางการทั้ง 7 ท่านเสมอ
     for (const p of BIGC_PMS) {
       pmMap.set(p.name, []);
     }
 
-    // 1. นำข้อมูล ITP (โครงสร้าง) เข้าแมป
+    // 2. นำข้อมูล ITP (โครงสร้าง) เข้าแมป
     for (const r of recs) {
       const p = r.project || {};
       const rawPm = (p.pm || r.checkIn?.inspectorName || "").trim();
       const pmName = matchPmName(rawPm);
 
+      // ดึงชื่อสาขาอย่างชาญฉลาด ไม่ให้ซ้ำเป็น DEMO code
       let storeName = p.store || p.storeName || p.branch || "";
       if (!storeName) {
         if (r.checkIn?.address && r.checkIn.address !== "หน้างาน Big-C Mini") {
           storeName = r.checkIn.address;
-        } else if (p.storeCode || r.checkIn?.siteCode) {
-          storeName = `บิ๊กซี มินิ (${p.storeCode || r.checkIn?.siteCode})`;
+        } else if (p.storeCode && p.storeCode !== "BIGC-SITE-DEMO") {
+          storeName = `บิ๊กซี มินิ (รหัส ${p.storeCode})`;
         } else if (r.checkIn?.lat && r.checkIn?.lng) {
-          storeName = `บิ๊กซี มินิ (${r.checkIn.lat.toFixed(4)}, ${r.checkIn.lng.toFixed(4)})`;
+          storeName = `บิ๊กซี มินิ (พิกัด ${r.checkIn.lat.toFixed(4)}, ${r.checkIn.lng.toFixed(4)})`;
         } else {
-          storeName = "บิ๊กซี มินิ (รอระบุชื่อสาขา)";
+          storeName = `บิ๊กซี มินิ (ใบงาน #${r.id.slice(0, 8)})`;
         }
       }
-      const storeCode = p.storeCode || r.checkIn?.siteCode || "-";
+
+      const storeCode =
+        p.storeCode && p.storeCode !== "BIGC-SITE-DEMO"
+          ? p.storeCode
+          : r.checkIn?.siteCode && r.checkIn.siteCode !== "BIGC-SITE-DEMO"
+          ? r.checkIn.siteCode
+          : "-";
+
       const isVerified = Boolean(r.checkInVerified || r.checkIn?.verified);
       const hasSelfie = Boolean(r.hasSelfie || r.checkIn?.selfiePhoto);
       const photoCount = r.photoCount || 0;
       const failCount = r.fail || 0;
+      const hasPhotos = photoCount > 0;
+
+      // กฎสำคัญ: ถ้าไม่มีรูปถ่ายว่าตรวจจริง ต้องขึ้น 0% ไม่ใช่ 100%
+      const completionRate = hasPhotos ? 100 : 0;
 
       const item: StoreItemInspection = {
         id: r.id,
@@ -193,12 +210,17 @@ export default function PMAuditReport() {
         lng: r.checkIn?.lng,
         hasSelfie,
         selfiePhoto: r.selfiePhoto || r.checkIn?.selfiePhoto,
-        hasInspectionPhotos: photoCount > 0,
+        hasInspectionPhotos: hasPhotos,
         inspectionPhotoCount: photoCount,
         defectCount: failCount,
         hasDefectPhotos: failCount > 0 && photoCount > 0,
         defectPhotoCount: failCount > 0 ? photoCount : 0,
-        statusLabel: r.approvalStatus || (failCount > 0 ? "พบจุดแก้ไข" : "ผ่าน"),
+        completionRate,
+        statusLabel: !hasPhotos
+          ? "0% (ไม่มีรูปตรวจยืนยัน)"
+          : failCount > 0
+          ? `พบจุดแก้ไข ${failCount} ข้อ (มีรูป ${photoCount} รูป)`
+          : `ผ่าน 100% (มีรูป ${photoCount} รูป)`,
         remark: p.remark,
       };
 
@@ -207,20 +229,32 @@ export default function PMAuditReport() {
       pmMap.set(pmName, existing);
     }
 
-    // 2. นำข้อมูล Weekly Defect เข้าแมป
+    // 3. นำข้อมูล Weekly Defect เข้าแมป
     for (const w of defs) {
       const pmName = matchPmName(w.pm);
       const isVerified = Boolean(w.checkInVerified || w.checkIn?.verified);
       const hasSelfie = Boolean(w.hasSelfie || w.checkIn?.selfiePhoto);
       const photoCount = w.photoCount || 0;
       const defectCount = w.totalDefects || 0;
+      const doneCount = (w.closedCount || 0) + (w.resolvedCount || 0);
+      const hasPhotos = photoCount > 0;
+
+      // กฎสำคัญ: ถ้าไม่มีรูปถ่ายว่าตรวจจริง ต้องขึ้น 0% ไม่ใช่ 100%
+      let completionRate = 0;
+      if (hasPhotos) {
+        if (defectCount > 0) {
+          completionRate = Math.round((doneCount / defectCount) * 100);
+        } else {
+          completionRate = 100;
+        }
+      }
 
       const item: StoreItemInspection = {
         id: w.id,
         kind: "weekly",
         typeLabel: `Defect วีค ${w.weekNumber}`,
         storeName: w.store || "บิ๊กซี มินิ",
-        storeCode: w.storeCode || "-",
+        storeCode: w.storeCode && w.storeCode !== "BIGC-SITE-DEMO" ? w.storeCode : "-",
         dateStr: w.inspDate || fmtDate(w.checkIn?.timestamp || w.savedAt),
         checkInVerified: isVerified,
         checkInTimestamp: w.checkIn?.timestamp || null,
@@ -228,12 +262,17 @@ export default function PMAuditReport() {
         lng: w.checkIn?.lng,
         hasSelfie,
         selfiePhoto: w.selfiePhoto || w.checkIn?.selfiePhoto,
-        hasInspectionPhotos: photoCount > 0,
+        hasInspectionPhotos: hasPhotos,
         inspectionPhotoCount: photoCount,
         defectCount,
-        hasDefectPhotos: photoCount > 0,
+        hasDefectPhotos: hasPhotos,
         defectPhotoCount: photoCount,
-        statusLabel: defectCount === 0 ? "ไม่มี Defect" : `พบ ${defectCount} จุด (${w.openCount || 0} รอแก้)`,
+        completionRate,
+        statusLabel: !hasPhotos
+          ? "0% (ไม่มีรูปตรวจยืนยัน)"
+          : defectCount === 0
+          ? `ไม่มี Defect (มีรูป ${photoCount} รูป)`
+          : `พบ ${defectCount} จุด (${doneCount} แก้แล้ว / มีรูป ${photoCount} รูป)`,
         remark: w.overallNote,
       };
 
@@ -242,19 +281,27 @@ export default function PMAuditReport() {
       pmMap.set(pmName, existing);
     }
 
-    // คำนวณสรุปสถิติตามโจทย์ของผู้ใช้
+    // 4. คำนวณสรุปสถิติตามโจทย์ของผู้บริหาร
     const result: PMAuditData[] = [];
 
     pmMap.forEach((stores, name) => {
+      // ข้าม PM ที่ไม่มีข้อมูลเลยและไม่ใช่ 7 PM หลัก
+      if (stores.length === 0 && !BIGC_PMS.some((p) => p.name === name)) {
+        return;
+      }
+
       const pmInfo = BIGC_PMS.find((p) => p.name === name);
-      const zone = pmInfo?.zone || "ทั่วไป";
+      const zone = pmInfo?.zone || "วิศวกรภายนอก/โครงการ";
 
       // หาสาขาที่ไม่ซ้ำกัน
       const uniqueStores = new Set(stores.map((s) => s.storeName));
       const totalInspections = stores.length;
       const uniqueStoresCount = uniqueStores.size;
 
-      // สาขาที่เช็คอิน
+      const itpCount = stores.filter((s) => s.kind === "itp").length;
+      const weeklyCount = stores.filter((s) => s.kind === "weekly").length;
+
+      // สาขาที่เช็คอิน GPS
       const checkInCount = stores.filter((s) => s.checkInVerified).length;
       const checkInRate = totalInspections > 0 ? Math.round((checkInCount / totalInspections) * 100) : 0;
 
@@ -262,7 +309,7 @@ export default function PMAuditReport() {
       const selfieCount = stores.filter((s) => s.hasSelfie).length;
       const selfieRate = totalInspections > 0 ? Math.round((selfieCount / totalInspections) * 100) : 0;
 
-      // สาขาที่มีการแนบรูปผลตรวจจริง
+      // สาขาที่มีการแนบรูปผลตรวจจริง (ถ้าไม่มีรูป = 0%)
       const inspectedWithPhotosCount = stores.filter((s) => s.hasInspectionPhotos).length;
       const inspectedWithPhotosRate =
         totalInspections > 0 ? Math.round((inspectedWithPhotosCount / totalInspections) * 100) : 0;
@@ -283,6 +330,8 @@ export default function PMAuditReport() {
         name,
         zone,
         totalInspections,
+        itpCount,
+        weeklyCount,
         uniqueStoresCount,
         checkInCount,
         checkInRate,
@@ -321,10 +370,20 @@ export default function PMAuditReport() {
     return list;
   }, [pmAuditList, selectedPm, searchFilter]);
 
-  // ภาพรวมทั้งระบบ (Grand Total)
+  // ภาพรวมทั้งระบบ (Grand Total ครบ 100% ทุกใบงาน)
   const grandTotal = useMemo(() => {
     const totalPms = pmAuditList.length;
     const totalInspections = pmAuditList.reduce((acc, p) => acc + p.totalInspections, 0);
+    const totalItp = pmAuditList.reduce((acc, p) => acc + p.itpCount, 0);
+    const totalWeekly = pmAuditList.reduce((acc, p) => acc + p.weeklyCount, 0);
+
+    // คำนวณสาขาจริงที่ไม่ซ้ำกันทั่วทั้งระบบ
+    const allUniqueStores = new Set<string>();
+    pmAuditList.forEach((p) => {
+      p.stores.forEach((s) => allUniqueStores.add(s.storeName));
+    });
+    const totalUniqueStores = allUniqueStores.size;
+
     const totalCheckIns = pmAuditList.reduce((acc, p) => acc + p.checkInCount, 0);
     const totalSelfies = pmAuditList.reduce((acc, p) => acc + p.selfieCount, 0);
     const totalInspectedWithPhotos = pmAuditList.reduce((acc, p) => acc + p.inspectedWithPhotosCount, 0);
@@ -337,6 +396,9 @@ export default function PMAuditReport() {
     return {
       totalPms,
       totalInspections,
+      totalItp,
+      totalWeekly,
+      totalUniqueStores,
       totalCheckIns,
       checkInPct: totalInspections > 0 ? Math.round((totalCheckIns / totalInspections) * 100) : 0,
       totalSelfies,
@@ -393,7 +455,7 @@ export default function PMAuditReport() {
                 <option value="all">แสดง PM ทั้งหมด ({pmAuditList.length} ท่าน)</option>
                 {pmAuditList.map((p) => (
                   <option key={p.name} value={p.name}>
-                    {p.name} ({p.zone}) - {p.totalInspections} สาขา
+                    {p.name} ({p.zone}) - รวม {p.totalInspections} ใบงาน ({p.uniqueStoresCount} สาขา)
                   </option>
                 ))}
               </select>
@@ -463,7 +525,7 @@ export default function PMAuditReport() {
                   </h1>
                   <p className="text-xs text-slate-600 mt-1">
                     รายงานสถิติการเข้าตรวจสอบหน้างานจริง (GPS Check-in), ภาพถ่าย Selfie ยืนยันตัวตน,
-                    การแนบรูปผลตรวจจริง และข้อบกพร่อง Defect แยกรายบุคคลพร้อมระบุชื่อสาขาทั้งหมด
+                    การแนบรูปผลตรวจจริง (ถ้าไม่มีรูปแสดง 0%) และข้อบกพร่อง Defect แยกรายบุคคลพร้อมระบุชื่อสาขาทั้งหมด
                   </p>
                 </div>
 
@@ -474,7 +536,7 @@ export default function PMAuditReport() {
                   </div>
                   <div>
                     <span className="text-slate-400">สถานะข้อมูล: </span>
-                    <span className="font-semibold text-emerald-700">อัปเดตเรียลไทม์จากระบบ</span>
+                    <span className="font-semibold text-emerald-700">อัปเดตเรียลไทม์ครบ 100%</span>
                   </div>
                   <div>
                     <span className="text-slate-400">จำนวน PM: </span>
@@ -488,11 +550,16 @@ export default function PMAuditReport() {
                 <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
                   <div className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
                     <Building2 className="w-3.5 h-3.5 text-brand" />
-                    <span>สาขาที่เข้าตรวจ</span>
+                    <span>ใบงานตรวจรวม</span>
                   </div>
                   <div className="text-lg font-bold text-slate-900 mt-0.5">
                     {grandTotal.totalInspections}{" "}
-                    <span className="text-[10px] font-normal text-slate-500">ครั้ง</span>
+                    <span className="text-[10px] font-normal text-slate-500">
+                      ({grandTotal.totalUniqueStores} สาขาจริง)
+                    </span>
+                  </div>
+                  <div className="text-[9.5px] text-slate-400 mt-0.5">
+                    ITP: {grandTotal.totalItp} | Defect: {grandTotal.totalWeekly}
                   </div>
                 </div>
 
@@ -505,6 +572,7 @@ export default function PMAuditReport() {
                     {grandTotal.totalCheckIns}{" "}
                     <span className="text-xs font-semibold">({grandTotal.checkInPct}%)</span>
                   </div>
+                  <div className="text-[9.5px] text-emerald-600 mt-0.5">พิกัดหน้างานสำเร็จ</div>
                 </div>
 
                 <div className="bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/80">
@@ -516,18 +584,20 @@ export default function PMAuditReport() {
                     {grandTotal.totalSelfies}{" "}
                     <span className="text-xs font-semibold">({grandTotal.selfiePct}%)</span>
                   </div>
+                  <div className="text-[9.5px] text-blue-600 mt-0.5">ยืนยันตัวตน PM</div>
                 </div>
 
                 <div className="bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-200/80">
                   <div className="text-[11px] font-medium text-indigo-800 flex items-center gap-1">
                     <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>สาขาที่แนบรูปผลตรวจ</span>
+                    <span>ตรวจจริงมีรูปยืนยัน</span>
                   </div>
                   <div className="text-lg font-bold text-indigo-700 mt-0.5">
                     {grandTotal.totalInspectedWithPhotos}{" "}
-                    <span className="text-[10px] font-normal text-indigo-500">
-                      ({grandTotal.totalAllInspectionPhotos} รูป)
-                    </span>
+                    <span className="text-xs font-semibold">({grandTotal.inspectedWithPhotosPct}%)</span>
+                  </div>
+                  <div className="text-[9.5px] text-indigo-600 mt-0.5">
+                    แนบรูปแล้ว {grandTotal.totalAllInspectionPhotos} รูป
                   </div>
                 </div>
 
@@ -542,12 +612,13 @@ export default function PMAuditReport() {
                       ({grandTotal.totalDefectPoints} จุด)
                     </span>
                   </div>
+                  <div className="text-[9.5px] text-amber-600 mt-0.5">จุดบกพร่องที่พบ</div>
                 </div>
 
                 <div className="bg-purple-50/70 p-2.5 rounded-xl border border-purple-200/80">
                   <div className="text-[11px] font-medium text-purple-800 flex items-center gap-1">
                     <ImageIcon className="w-3.5 h-3.5 text-purple-600" />
-                    <span>สาขาที่แนบรูป Defect</span>
+                    <span>แนบรูป Defect</span>
                   </div>
                   <div className="text-lg font-bold text-purple-700 mt-0.5">
                     {grandTotal.totalDefectPhotoBranches}{" "}
@@ -555,6 +626,7 @@ export default function PMAuditReport() {
                       ({grandTotal.totalAllDefectPhotos} รูป)
                     </span>
                   </div>
+                  <div className="text-[9.5px] text-purple-600 mt-0.5">ภาพ Before / After</div>
                 </div>
               </div>
             </div>
@@ -568,7 +640,9 @@ export default function PMAuditReport() {
                     ตารางสรุปเปรียบเทียบผลงาน PM แต่ละท่าน (PM Summary Matrix)
                   </h2>
                 </div>
-                <span className="text-xs text-slate-500">เรียงตามจำนวนสาขาที่เข้าตรวจ</span>
+                <span className="text-xs text-slate-500">
+                  *ถ้าไม่มีรูปถ่ายตรวจจริง อัตราผลตรวจจะแสดง 0% เพื่อความโปร่งใส
+                </span>
               </div>
 
               <div className="overflow-x-auto">
@@ -578,30 +652,35 @@ export default function PMAuditReport() {
                       <th className="py-2.5 px-3">ลำดับ</th>
                       <th className="py-2.5 px-3">ชื่อ PM</th>
                       <th className="py-2.5 px-3">โซนรับผิดชอบ</th>
-                      <th className="py-2.5 px-3 text-center">สาขาทั้งหมด</th>
+                      <th className="py-2.5 px-3 text-center">ใบงาน (สาขาจริง)</th>
                       <th className="py-2.5 px-3 text-center">เช็คอิน (สาขา / %)</th>
                       <th className="py-2.5 px-3 text-center">Selfies (สาขา / %)</th>
-                      <th className="py-2.5 px-3 text-center">ตรวจจริงแนบรูป (สาขา)</th>
+                      <th className="py-2.5 px-3 text-center bg-indigo-50/50 print:bg-transparent">
+                        ตรวจจริงมีรูป (% / สาขา)
+                      </th>
                       <th className="py-2.5 px-3 text-center">Defect (สาขา / จุด)</th>
-                      <th className="py-2.5 px-3 text-center">แนบรูป Defect (สาขา)</th>
+                      <th className="py-2.5 px-3 text-center">แนบรูป Defect (สาขา / รูป)</th>
                       <th className="py-2.5 px-3 text-center">สถานะการตรวจ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {displayedPms.map((pm, idx) => {
-                      const isComplete = pm.checkInRate >= 70 && pm.selfieRate >= 70;
+                      const hasPhotos = pm.inspectedWithPhotosCount > 0;
                       return (
                         <tr
                           key={pm.name}
                           className="hover:bg-slate-50 transition-colors print:hover:bg-transparent"
                         >
-                          <td className="py-2 px-3 font-semibold text-slate-500">{idx + 1}</td>
-                          <td className="py-2 px-3 font-bold text-slate-900">{pm.name}</td>
-                          <td className="py-2 px-3 text-slate-600">{pm.zone}</td>
-                          <td className="py-2 px-3 text-center font-bold text-slate-800">
-                            {pm.totalInspections}
+                          <td className="py-2.5 px-3 font-semibold text-slate-500">{idx + 1}</td>
+                          <td className="py-2.5 px-3 font-bold text-slate-900">{pm.name}</td>
+                          <td className="py-2.5 px-3 text-slate-600">{pm.zone}</td>
+                          <td className="py-2.5 px-3 text-center font-bold text-slate-800">
+                            <div>{pm.totalInspections} ใบงาน</div>
+                            <div className="text-[10px] font-normal text-slate-500">
+                              ({pm.uniqueStoresCount} สาขาจริง)
+                            </div>
                           </td>
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-2.5 px-3 text-center">
                             <span
                               className={`font-semibold ${
                                 pm.checkInCount > 0 ? "text-emerald-700" : "text-slate-400"
@@ -611,7 +690,7 @@ export default function PMAuditReport() {
                             </span>{" "}
                             <span className="text-[11px] text-slate-500">({pm.checkInRate}%)</span>
                           </td>
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-2.5 px-3 text-center">
                             <span
                               className={`font-semibold ${
                                 pm.selfieCount > 0 ? "text-blue-700" : "text-slate-400"
@@ -621,19 +700,26 @@ export default function PMAuditReport() {
                             </span>{" "}
                             <span className="text-[11px] text-slate-500">({pm.selfieRate}%)</span>
                           </td>
-                          <td className="py-2 px-3 text-center">
-                            <span
-                              className={`font-semibold ${
-                                pm.inspectedWithPhotosCount > 0 ? "text-indigo-700" : "text-slate-400"
-                              }`}
-                            >
-                              {pm.inspectedWithPhotosCount} สาขา
-                            </span>{" "}
-                            <span className="text-[11px] text-slate-500">
-                              ({pm.totalInspectionPhotos} รูป)
-                            </span>
+
+                          {/* คอลัมน์ตรวจจริงมีรูปยืนยัน: ถ้าไม่มีรูปถ่าย = 0% */}
+                          <td className="py-2.5 px-3 text-center bg-indigo-50/30 print:bg-transparent">
+                            {hasPhotos ? (
+                              <div>
+                                <span className="font-bold text-indigo-700">
+                                  {pm.inspectedWithPhotosRate}%
+                                </span>{" "}
+                                <span className="text-[11px] text-slate-600">
+                                  ({pm.inspectedWithPhotosCount} สาขา / {pm.totalInspectionPhotos} รูป)
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                                0% (ไม่มีรูปตรวจ)
+                              </span>
+                            )}
                           </td>
-                          <td className="py-2 px-3 text-center">
+
+                          <td className="py-2.5 px-3 text-center">
                             <span
                               className={`font-semibold ${
                                 pm.defectBranchesCount > 0 ? "text-amber-700" : "text-slate-400"
@@ -643,7 +729,7 @@ export default function PMAuditReport() {
                             </span>{" "}
                             <span className="text-[11px] text-slate-500">({pm.totalDefects} จุด)</span>
                           </td>
-                          <td className="py-2 px-3 text-center">
+                          <td className="py-2.5 px-3 text-center">
                             <span
                               className={`font-semibold ${
                                 pm.defectPhotosBranchesCount > 0 ? "text-purple-700" : "text-slate-400"
@@ -655,19 +741,21 @@ export default function PMAuditReport() {
                               ({pm.totalDefectPhotos} รูป)
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-center">
-                            {isComplete ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                                <CheckCircle2 className="w-3 h-3" />
-                                <span>ครบถ้วน</span>
+
+                          {/* สถานะการตรวจ */}
+                          <td className="py-2.5 px-3 text-center">
+                            {hasPhotos ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>มีรูปตรวจจริง ({pm.inspectedWithPhotosRate}%)</span>
                               </span>
                             ) : pm.totalInspections > 0 ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                                <AlertTriangle className="w-3 h-3" />
-                                <span>กำลังดำเนินการ</span>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                                <XCircle className="w-3 h-3 text-rose-600" />
+                                <span>0% ไม่มีรูปตรวจยืนยัน</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">
                                 <span>ยังไม่มีใบงาน</span>
                               </span>
                             )}
@@ -701,8 +789,8 @@ export default function PMAuditReport() {
                           </span>
                         </div>
                         <p className="text-xs text-slate-500">
-                          วิศวกรผู้ควบคุมงาน Big-C • รับผิดชอบรวม {pm.totalInspections} ใบงานตรวจ (
-                          {pm.uniqueStoresCount} สาขา)
+                          วิศวกรผู้ควบคุมงาน Big-C • รับผิดชอบรวม {pm.totalInspections} ใบงาน (ITP:{" "}
+                          {pm.itpCount} | Defect: {pm.weeklyCount}) รวม {pm.uniqueStoresCount} สาขาจริง
                         </p>
                       </div>
                     </div>
@@ -715,14 +803,21 @@ export default function PMAuditReport() {
                       <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 font-semibold">
                         🤳 Selfie {pm.selfieCount} สาขา ({pm.selfieRate}%)
                       </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 font-semibold">
-                        📸 แนบรูปตรวจ {pm.inspectedWithPhotosCount} สาขา ({pm.totalInspectionPhotos} รูป)
+                      <span
+                        className={`px-2.5 py-1 rounded-lg border font-semibold ${
+                          pm.inspectedWithPhotosCount > 0
+                            ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                            : "bg-rose-50 text-rose-800 border-rose-200"
+                        }`}
+                      >
+                        📸 รูปตรวจจริง: {pm.inspectedWithPhotosRate}% ({pm.inspectedWithPhotosCount} สาขา /{" "}
+                        {pm.totalInspectionPhotos} รูป)
                       </span>
                       <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
                         ⚠️ Defect {pm.defectBranchesCount} สาขา ({pm.totalDefects} จุด)
                       </span>
                       <span className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 font-semibold">
-                        🖼️ แนบรูป Defect {pm.defectPhotosBranchesCount} สาขา ({pm.totalDefectPhotos} รูป)
+                        🖼️ รูป Defect {pm.defectPhotosBranchesCount} สาขา ({pm.totalDefectPhotos} รูป)
                       </span>
                     </div>
                   </div>
@@ -738,12 +833,15 @@ export default function PMAuditReport() {
                         <thead>
                           <tr className="bg-slate-50 text-slate-700 font-semibold border-y border-slate-200 print:bg-slate-100">
                             <th className="py-2 px-2.5 w-10 text-center">#</th>
-                            <th className="py-2 px-2.5">ชื่อสาขา (Store Name) & รหัส</th>
+                            <th className="py-2 px-2.5">ชื่อสาขา (Store Name)</th>
                             <th className="py-2 px-2.5">ประเภทใบตรวจ</th>
                             <th className="py-2 px-2.5">วันที่เข้าตรวจ</th>
                             <th className="py-2 px-2.5">พิกัด GPS / เช็คอิน</th>
                             <th className="py-2 px-2.5 text-center">ภาพ Selfie</th>
-                            <th className="py-2 px-2.5 text-center">แนบรูปผลตรวจจริง</th>
+                            <th className="py-2 px-2.5 text-center">แนบรูปตรวจจริง</th>
+                            <th className="py-2 px-2.5 text-center bg-indigo-50/50 print:bg-transparent">
+                              % ผลตรวจจริง
+                            </th>
                             <th className="py-2 px-2.5 text-center">Defect ที่พบ</th>
                             <th className="py-2 px-2.5 text-center">แนบรูป Defect</th>
                             <th className="py-2 px-2.5">หมายเหตุ / Remote</th>
@@ -850,6 +948,21 @@ export default function PMAuditReport() {
                                 )}
                               </td>
 
+                              {/* % ผลการตรวจจริง: ถ้าไม่มีรูปถ่ายว่าตรวจ ต้องขึ้น 0% ไม่ใช่ 100% */}
+                              <td className="py-2.5 px-2.5 text-center bg-indigo-50/20 print:bg-transparent">
+                                {store.hasInspectionPhotos ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    <span>{store.completionRate}% (มีรูปตรวจ)</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                                    <XCircle className="w-3 h-3 text-rose-600" />
+                                    <span>0% (ไม่มีรูปถ่าย)</span>
+                                  </span>
+                                )}
+                              </td>
+
                               {/* Defect ที่พบ */}
                               <td className="py-2.5 px-2.5 text-center">
                                 {store.defectCount > 0 ? (
@@ -857,10 +970,12 @@ export default function PMAuditReport() {
                                     <AlertTriangle className="w-3 h-3 text-amber-600" />
                                     <span>พบ {store.defectCount} จุด</span>
                                   </span>
-                                ) : (
+                                ) : store.hasInspectionPhotos ? (
                                   <span className="text-[10px] text-emerald-700 font-semibold">
-                                    ผ่าน 100%
+                                    ไม่พบ Defect
                                   </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400">ไม่มีข้อมูล</span>
                                 )}
                               </td>
 
