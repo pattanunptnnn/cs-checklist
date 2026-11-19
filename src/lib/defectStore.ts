@@ -11,7 +11,11 @@ import { getSupabase } from "./supabase";
 const DIR = path.join(process.cwd(), "data", "defects");
 
 async function ensureDir() {
-  await fs.mkdir(DIR, { recursive: true });
+  try {
+    await fs.mkdir(DIR, { recursive: true });
+  } catch {
+    // ป้องกัน error บนสภาพแวดล้อม read-only เช่น Vercel Serverless
+  }
 }
 
 function fileOf(id: string) {
@@ -52,7 +56,7 @@ export async function listWeeklyRecords(): Promise<WeeklyDefectSummary[]> {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         return data.map((row: any) => {
           const defects = row.defects || [];
           const stats = summarizeDefects(defects);
@@ -81,47 +85,52 @@ export async function listWeeklyRecords(): Promise<WeeklyDefectSummary[]> {
     }
   }
 
-  // Fallback อ่านจากไฟล์ในเครื่อง
-  await ensureDir();
-  const files = (await fs.readdir(DIR)).filter((f) => f.endsWith(".json"));
-  const rows: WeeklyDefectSummary[] = [];
+  // Fallback อ่านจากไฟล์ในเครื่อง (Safe with try/catch)
+  try {
+    await ensureDir();
+    const files = (await fs.readdir(DIR)).filter((f) => f.endsWith(".json"));
+    const rows: WeeklyDefectSummary[] = [];
 
-  for (const f of files) {
-    try {
-      const rec = JSON.parse(await fs.readFile(path.join(DIR, f), "utf8")) as WeeklyDefectRecord;
-      const defects = rec.defects || [];
-      const stats = summarizeDefects(defects);
+    for (const f of files) {
+      try {
+        const rec = JSON.parse(await fs.readFile(path.join(DIR, f), "utf8")) as WeeklyDefectRecord;
+        const defects = rec.defects || [];
+        const stats = summarizeDefects(defects);
 
-      rows.push({
-        id: f.replace(/\.json$/, ""),
-        store: rec.store || "(ยังไม่ระบุชื่อสาขา)",
-        storeCode: rec.storeCode || "-",
-        weekNumber: rec.weekNumber || 1,
-        inspDate: rec.inspDate || "",
-        contractor: rec.contractor || "ผู้รับเหมาทั่วไป",
-        pm: rec.pm || "วิศวกรผู้ตรวจ",
-        ...stats,
-        checkInVerified: Boolean(rec.checkIn?.verified),
-        checkIn: rec.checkIn || null,
-        hasSelfie: Boolean(rec.checkIn?.selfiePhoto),
-        selfiePhoto: rec.checkIn?.selfiePhoto || undefined,
-        overallNote: rec.overallNote || undefined,
-        savedAt: rec.savedAt || null,
-        createdBy: rec.createdBy,
-        createdByName: rec.createdByName,
-      });
-    } catch {
-      // ข้ามไฟล์เสีย
+        rows.push({
+          id: f.replace(/\.json$/, ""),
+          store: rec.store || "(ยังไม่ระบุชื่อสาขา)",
+          storeCode: rec.storeCode || "-",
+          weekNumber: rec.weekNumber || 1,
+          inspDate: rec.inspDate || "",
+          contractor: rec.contractor || "ผู้รับเหมาทั่วไป",
+          pm: rec.pm || "วิศวกรผู้ตรวจ",
+          ...stats,
+          checkInVerified: Boolean(rec.checkIn?.verified),
+          checkIn: rec.checkIn || null,
+          hasSelfie: Boolean(rec.checkIn?.selfiePhoto),
+          selfiePhoto: rec.checkIn?.selfiePhoto || undefined,
+          overallNote: rec.overallNote || undefined,
+          savedAt: rec.savedAt || null,
+          createdBy: rec.createdBy,
+          createdByName: rec.createdByName,
+        });
+      } catch {
+        // ข้ามไฟล์เสีย
+      }
     }
+
+    rows.sort((a, b) => {
+      const timeA = a.savedAt || a.inspDate || "";
+      const timeB = b.savedAt || b.inspDate || "";
+      return timeB.localeCompare(timeA);
+    });
+
+    return rows;
+  } catch (fsErr) {
+    console.warn("Local storage read error, returning empty list:", fsErr);
+    return [];
   }
-
-  rows.sort((a, b) => {
-    const timeA = a.savedAt || a.inspDate || "";
-    const timeB = b.savedAt || b.inspDate || "";
-    return timeB.localeCompare(timeA);
-  });
-
-  return rows;
 }
 
 // ------------------------------------------------------------

@@ -55,9 +55,19 @@ export default function RecordList() {
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/records");
+      if (!res.ok) {
+        setFailed(true);
+        setRows([]);
+        return;
+      }
       const data = await res.json();
-      setRows(data);
-      setFailed(false);
+      if (Array.isArray(data)) {
+        setRows(data);
+        setFailed(false);
+      } else {
+        setRows([]);
+        setFailed(false);
+      }
     } catch {
       setFailed(true);
       setRows([]);

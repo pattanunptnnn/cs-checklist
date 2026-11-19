@@ -11,7 +11,11 @@ import { getSupabase } from "./supabase";
 const DIR = path.join(process.cwd(), "data", "records");
 
 async function ensureDir() {
-  await fs.mkdir(DIR, { recursive: true });
+  try {
+    await fs.mkdir(DIR, { recursive: true });
+  } catch {
+    // ป้องกัน error บนสภาพแวดล้อม read-only เช่น Vercel Serverless
+  }
 }
 
 function fileOf(id: string) {
@@ -45,7 +49,7 @@ export async function listRecords(): Promise<RecordSummary[]> {
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && Array.isArray(data)) {
         const validRows = data.filter((row: any) => row.id && !String(row.id).startsWith("system_"));
         return validRows.map((row: any) => {
           const rec: InspectionRecord = {
@@ -77,35 +81,40 @@ export async function listRecords(): Promise<RecordSummary[]> {
     }
   }
 
-  // Fallback อ่านจากโฟลเดอร์ในเครื่อง
-  await ensureDir();
-  const files = (await fs.readdir(DIR)).filter((f) => f.endsWith(".json"));
-  const rows: RecordSummary[] = [];
+  // Fallback อ่านจากโฟลเดอร์ในเครื่อง (Safe with try/catch)
+  try {
+    await ensureDir();
+    const files = (await fs.readdir(DIR)).filter((f) => f.endsWith(".json"));
+    const rows: RecordSummary[] = [];
 
-  for (const f of files) {
-    try {
-      const rec = JSON.parse(await fs.readFile(path.join(DIR, f), "utf8")) as InspectionRecord;
-      const { pass, fail, filled } = calculateSummary(rec);
-      rows.push({
-        id: f.replace(/\.json$/, ""),
-        project: rec.project || {},
-        savedAt: rec.savedAt || null,
-        pass,
-        fail,
-        filled,
-        approvalStatus: rec.approvalStatus || undefined,
-        checkInVerified: Boolean(rec.checkIn?.verified),
-        checkIn: rec.checkIn || null,
-        hasSelfie: Boolean(rec.checkIn?.selfiePhoto),
-        selfiePhoto: rec.checkIn?.selfiePhoto,
-      });
-    } catch {
-      // ข้ามไฟล์ที่เสีย
+    for (const f of files) {
+      try {
+        const rec = JSON.parse(await fs.readFile(path.join(DIR, f), "utf8")) as InspectionRecord;
+        const { pass, fail, filled } = calculateSummary(rec);
+        rows.push({
+          id: f.replace(/\.json$/, ""),
+          project: rec.project || {},
+          savedAt: rec.savedAt || null,
+          pass,
+          fail,
+          filled,
+          approvalStatus: rec.approvalStatus || undefined,
+          checkInVerified: Boolean(rec.checkIn?.verified),
+          checkIn: rec.checkIn || null,
+          hasSelfie: Boolean(rec.checkIn?.selfiePhoto),
+          selfiePhoto: rec.checkIn?.selfiePhoto,
+        });
+      } catch {
+        // ข้ามไฟล์ที่เสีย
+      }
     }
-  }
 
-  rows.sort((a, b) => String(b.savedAt || "").localeCompare(String(a.savedAt || "")));
-  return rows;
+    rows.sort((a, b) => String(b.savedAt || "").localeCompare(String(a.savedAt || "")));
+    return rows;
+  } catch (fsErr) {
+    console.warn("Local storage read error, returning empty list:", fsErr);
+    return [];
+  }
 }
 
 // ------------------------------------------------------------

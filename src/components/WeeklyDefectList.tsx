@@ -75,8 +75,10 @@ export default function WeeklyDefectList() {
     try {
       const res = await fetch("/api/defects");
       if (res.ok) {
-        const data: WeeklyDefectSummary[] = await res.json();
-        setRows(data);
+        const data = await res.json();
+        setRows(Array.isArray(data) ? data : []);
+      } else {
+        setRows([]);
       }
     } catch (err) {
       console.error("Failed to load weekly defects:", err);
