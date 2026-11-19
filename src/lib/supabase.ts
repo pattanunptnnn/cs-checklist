@@ -21,6 +21,15 @@ export function getSupabase(): SupabaseClient | null {
   if (!client) {
     client = createClient(supabaseUrl.trim(), supabaseAnonKey.trim(), {
       auth: { persistSession: false },
+      global: {
+        fetch: (url, options = {}) => {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2500);
+          return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+            clearTimeout(timer)
+          );
+        },
+      },
     });
   }
   return client;
