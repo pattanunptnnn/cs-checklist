@@ -40,6 +40,37 @@ import { useAuth } from "./AuthProvider";
 
 const TOTAL = totalItems();
 
+export interface UnifiedInspection {
+  id: string;
+  kind: "itp" | "weekly";
+  badgeText: string;
+  storeName: string;
+  storeCode: string;
+  pmName: string;
+  contractor: string;
+  dateStr: string;
+  checkInTimestamp: string | null;
+  verified: boolean;
+  selfiePhoto?: string;
+  lat?: number;
+  lng?: number;
+  accuracy?: number;
+  siteCode?: string;
+  punctuality: PunctualityStatus;
+  punctualityNote: string;
+  completionRate: number;
+  passCount: number;
+  failCount: number;
+  filledCount: number;
+  totalDefects?: number;
+  openCount?: number;
+  resolvedCount?: number;
+  criticalCount?: number;
+  approvalStatus: string;
+  remark?: string;
+  linkUrl: string;
+}
+
 // แปลงชื่อ PM ให้ตรงกับรายชื่อมาตรฐาน Big-C
 function matchPmName(rawPmName?: string): string {
   if (!rawPmName) return "ไม่ระบุชื่อ PM";
@@ -129,7 +160,7 @@ export default function PMDashboard() {
   const [selectedPm, setSelectedPm] = useState<string>("all");
   const [punctFilter, setPunctFilter] = useState<string>("all");
   const [defectStatusFilter, setDefectStatusFilter] = useState<"all" | "open" | "resolved" | "critical">("all");
-  const [activeView, setActiveView] = useState<"sites" | "defects">("sites");
+  const [activeView, setActiveView] = useState<"all" | "sites" | "defects">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [previewSelfie, setPreviewSelfie] = useState<string | null>(null);
   const [chartMetric, setChartMetric] = useState<"sites" | "ontime" | "score" | "defects">("sites");
@@ -194,10 +225,26 @@ export default function PMDashboard() {
         verified
       );
 
+      // Smart branch name fallback
+      let storeName = p.store || p.storeName || p.branch || "";
+      if (!storeName) {
+        if (r.checkIn?.address && r.checkIn.address !== "หน้างาน Big-C Mini") {
+          storeName = r.checkIn.address;
+        } else if (p.storeCode || r.checkIn?.siteCode) {
+          storeName = `บิ๊กซี มินิ (${p.storeCode || r.checkIn?.siteCode})`;
+        } else if (r.checkIn?.lat && r.checkIn?.lng) {
+          storeName = `บิ๊กซี มินิ (พิกัด ${r.checkIn.lat.toFixed(4)}, ${r.checkIn.lng.toFixed(4)})`;
+        } else {
+          storeName = "บิ๊กซี มินิ (รอระบุชื่อสาขา)";
+        }
+      }
+
+      const storeCode = p.storeCode || r.checkIn?.siteCode || "-";
+
       return {
         recordId: r.id,
-        storeName: p.store || p.storeName || r.checkIn?.address || "(ยังไม่ระบุชื่อสาขา)",
-        storeCode: p.storeCode || r.checkIn?.siteCode || "-",
+        storeName,
+        storeCode,
         contractor: p.contractor || "ผู้รับเหมาทั่วไป",
         pmName,
         scheduledDate,
@@ -232,6 +279,14 @@ export default function PMDashboard() {
       const list = map.get(v.pmName) || [];
       list.push(v);
       map.set(v.pmName, list);
+    }
+
+    // รวม PM ที่มีรอบตรวจ Defect รายสัปดาห์ด้วย
+    for (const w of (weeklyDefects || [])) {
+      const pm = matchPmName(w.pm);
+      if (!map.has(pm)) {
+        map.set(pm, []);
+      }
     }
 
     const list: PMPerformance[] = [];
@@ -422,6 +477,135 @@ export default function PMDashboard() {
 
     return list;
   }, [weeklyDefects, selectedPm, defectStatusFilter, searchQuery, role, user]);
+
+  // รวมทุกใบตรวจ (ทั้ง 130 ใบงานโครงสร้าง ITP + 36 รอบตรวจ Defect รายสัปดาห์ = 166 รายการ)
+  const allInspections = useMemo<UnifiedInspection[]>(() => {
+    const list: UnifiedInspection[] = [];
+
+    // 1. งานตรวจโครงสร้าง ITP
+    for (const v of siteVisits) {
+      list.push({
+        id: v.recordId,
+        kind: "itp",
+        badgeText: "โครงสร้าง ITP",
+        storeName: v.storeName,
+        storeCode: v.storeCode,
+        pmName: v.pmName,
+        contractor: v.contractor,
+        dateStr: v.scheduledDate || fmtShortDate(v.checkInTimestamp),
+        checkInTimestamp: v.checkInTimestamp,
+        verified: v.verified,
+        selfiePhoto: v.selfiePhoto,
+        lat: v.lat,
+        lng: v.lng,
+        accuracy: v.accuracy,
+        siteCode: v.siteCode,
+        punctuality: v.punctuality,
+        punctualityNote: v.punctualityNote,
+        completionRate: Math.round((v.filledCount / TOTAL) * 100),
+        passCount: v.passCount,
+        failCount: v.failCount,
+        filledCount: v.filledCount,
+        approvalStatus: v.approvalStatus || "รอตรวจ",
+        remark: v.remark,
+        linkUrl: `/record/${v.recordId}`,
+      });
+    }
+
+    // 2. รอบตรวจ Defect รายสัปดาห์
+    for (const w of (weeklyDefects || [])) {
+      const pmName = matchPmName(w.pm);
+      const isVerified = Boolean(w.checkInVerified || w.checkIn?.verified);
+      const checkInTimestamp = w.checkIn?.timestamp || null;
+      const { status: punctuality, note: punctualityNote } = evaluatePunctuality(
+        w.inspDate,
+        checkInTimestamp,
+        isVerified
+      );
+
+      const pendingCount = (w.openCount || 0) + (w.inProgressCount || 0);
+      const doneCount = (w.closedCount || 0) + (w.resolvedCount || 0);
+      const totalDef = w.totalDefects || 0;
+      const compRate = totalDef > 0 ? Math.round((doneCount / totalDef) * 100) : 100;
+
+      list.push({
+        id: w.id,
+        kind: "weekly",
+        badgeText: `Defect วีค ${w.weekNumber}`,
+        storeName: w.store || "บิ๊กซี มินิ",
+        storeCode: w.storeCode || "-",
+        pmName,
+        contractor: w.contractor || "ผู้รับเหมาทั่วไป",
+        dateStr: w.inspDate || fmtShortDate(checkInTimestamp || w.savedAt),
+        checkInTimestamp,
+        verified: isVerified,
+        selfiePhoto: w.selfiePhoto || w.checkIn?.selfiePhoto,
+        lat: w.checkIn?.lat,
+        lng: w.checkIn?.lng,
+        accuracy: w.checkIn?.accuracy,
+        siteCode: w.checkIn?.siteCode,
+        punctuality,
+        punctualityNote,
+        completionRate: compRate,
+        passCount: doneCount,
+        failCount: pendingCount,
+        filledCount: totalDef,
+        totalDefects: totalDef,
+        openCount: pendingCount,
+        resolvedCount: doneCount,
+        criticalCount: w.criticalCount || 0,
+        approvalStatus: pendingCount === 0 ? "แก้ไขครบถ้วน" : "รอผู้รับเหมาแก้ไข",
+        remark: w.overallNote,
+        linkUrl: `/defects/${w.id}`,
+      });
+    }
+
+    // เรียงลำดับจากวันที่ล่าสุด
+    return list.sort((a, b) => {
+      const tA = a.checkInTimestamp ? new Date(a.checkInTimestamp).getTime() : 0;
+      const tB = b.checkInTimestamp ? new Date(b.checkInTimestamp).getTime() : 0;
+      return tB - tA;
+    });
+  }, [siteVisits, weeklyDefects]);
+
+  // กรองรายการมุมมองรวมทั้งหมด
+  const filteredAllInspections = useMemo(() => {
+    let list = allInspections;
+
+    // ถ้า Login เป็น PM ให้แสดงเฉพาะรายการของ PM ท่านนั้น
+    if (role === "pm" && user) {
+      const cleanUser = user.name.replace(/^K\.\s*/i, "").trim().toLowerCase();
+      list = list.filter((item) => {
+        const itemClean = (item.pmName || "").replace(/^K\.\s*/i, "").trim().toLowerCase();
+        return itemClean === cleanUser || itemClean.includes(cleanUser) || cleanUser.includes(itemClean);
+      });
+    } else if (selectedPm !== "all") {
+      list = list.filter((item) => item.pmName === selectedPm);
+    }
+
+    if (punctFilter === "on_time") {
+      list = list.filter((item) => item.punctuality === "on_time");
+    } else if (punctFilter === "late") {
+      list = list.filter((item) => item.punctuality === "late");
+    } else if (punctFilter === "missing") {
+      list = list.filter((item) => !item.verified);
+    } else if (punctFilter === "verified") {
+      list = list.filter((item) => item.verified);
+    } else if (punctFilter === "selfie") {
+      list = list.filter((item) => Boolean(item.selfiePhoto));
+    }
+
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((item) =>
+        [item.storeName, item.storeCode, item.contractor, item.pmName, item.siteCode, item.badgeText]
+          .filter(Boolean)
+          .some((val) => String(val).toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [allInspections, selectedPm, punctFilter, searchQuery, role, user]);
 
   return (
     <div className="min-h-screen pb-24 bg-page">
@@ -979,13 +1163,15 @@ export default function PMDashboard() {
 
         {/* ────────── ส่วนที่ 2: ประวัติการเข้าไซต์งาน & แผนงาน ────────── */}
         <section className="card p-4 sm:p-5">
-          {/* ส่วนหัวของ Section 2 พร้อมแท็บสลับดู ITP / Defect รายวีค */}
+          {/* ส่วนหัวของ Section 2 พร้อม 3 แท็บสลับดู: ทั้งหมด / ITP / Defect รายวีค */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-line">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <MapPin className="w-4 h-4 text-brand" />
                 <h3 className="font-display font-bold text-base text-ink">
-                  {activeView === "sites"
+                  {activeView === "all"
+                    ? "รายการตรวจทุกสาขา & สรุปผลความคืบหน้า (All Inspections)"
+                    : activeView === "sites"
                     ? "ประวัติการเข้าตรวจไซต์งาน & รายการยืนยันพิกัด (ITP)"
                     : "รอบตรวจ Defect รายสัปดาห์ & ข้อบกพร่องสะสม (Weekly Defects)"}
                 </h3>
@@ -1000,33 +1186,50 @@ export default function PMDashboard() {
                 ) : null}
               </div>
               <p className="text-xs text-ink2 mt-0.5">
-                {activeView === "sites"
+                {activeView === "all"
+                  ? "แสดงประวัติใบตรวจทั้งหมดทุกสาขา ชื่อ PM ผู้ตรวจ, % ความคืบหน้าในการตรวจ, และหลักฐานการเช็คอิน GPS/Selfie"
+                  : activeView === "sites"
                   ? "แสดงวัน-เวลาเช็คอินจริง เปรียบเทียบกับวันที่นัดหมาย พร้อมพิกัดดาวเทียม GPS"
                   : "แสดงใบรอบตรวจ Defect ประจำสัปดาห์ ข้อบกพร่องที่พบ และสถานะการแก้ไขของผู้รับเหมา"}
               </p>
             </div>
 
-            {/* ปุ่มสลับ 2 แท็บ: งานตรวจโครงสร้าง ITP / รอบตรวจ Defect รายวีค */}
-            <div className="flex items-center gap-1.5 p-1 bg-sunken rounded-xl border border-line text-xs self-start md:self-auto">
+            {/* ปุ่มสลับ 3 แท็บ: ทั้งหมด / งานตรวจโครงสร้าง ITP / รอบตรวจ Defect รายวีค */}
+            <div className="flex items-center gap-1.5 p-1 bg-sunken rounded-xl border border-line text-xs self-start md:self-auto overflow-x-auto max-w-full">
+              <button
+                type="button"
+                onClick={() => setActiveView("all")}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+                  activeView === "all"
+                    ? "bg-card text-brand shadow-sm font-black"
+                    : "text-ink3 hover:text-ink"
+                }`}
+              >
+                <ClipboardCheck className="w-3.5 h-3.5" />
+                <span>ทั้งหมด</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-brand/15 text-brand font-bold">
+                  {filteredAllInspections.length}
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={() => setActiveView("sites")}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 ${
                   activeView === "sites"
-                    ? "bg-card text-brand shadow-sm font-black"
+                    ? "bg-card text-sky-600 dark:text-sky-400 shadow-sm font-black"
                     : "text-ink3 hover:text-ink"
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>ไซต์งาน ITP</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-line text-ink2 font-semibold">
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold">
                   {filteredVisits.length}
                 </span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveView("defects")}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 shrink-0 ${
                   activeView === "defects"
                     ? "bg-card text-rose-600 dark:text-rose-400 shadow-sm font-black"
                     : "text-ink3 hover:text-ink"
@@ -1054,7 +1257,47 @@ export default function PMDashboard() {
               />
             </div>
 
-            {activeView === "sites" ? (
+            {activeView === "all" ? (
+              /* กรองสถานะเช็คอินสำหรับมุมมองทั้งหมด */
+              <div className="inline-flex p-1 bg-sunken rounded-xl border border-line text-xs flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setPunctFilter("all")}
+                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                    punctFilter === "all" ? "bg-card text-brand shadow-sm font-bold" : "text-ink3 hover:text-ink"
+                  }`}
+                >
+                  ทั้งหมด
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPunctFilter("verified")}
+                  className={`px-2 py-1 rounded-lg font-semibold transition-all ${
+                    punctFilter === "verified" ? "bg-card text-teal-600 shadow-sm font-bold" : "text-ink3 hover:text-ink"
+                  }`}
+                >
+                  เช็คอิน GPS แล้ว
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPunctFilter("selfie")}
+                  className={`px-2 py-1 rounded-lg font-semibold transition-all ${
+                    punctFilter === "selfie" ? "bg-card text-purple-600 shadow-sm font-bold" : "text-ink3 hover:text-ink"
+                  }`}
+                >
+                  มีรูป Selfie
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPunctFilter("missing")}
+                  className={`px-2 py-1 rounded-lg font-semibold transition-all ${
+                    punctFilter === "missing" ? "bg-card text-rose-600 shadow-sm font-bold" : "text-ink3 hover:text-ink"
+                  }`}
+                >
+                  ยังไม่เช็คอิน
+                </button>
+              </div>
+            ) : activeView === "sites" ? (
               /* กรองสถานะความตรงเวลาสำหรับไซต์งาน ITP */
               <div className="inline-flex p-1 bg-sunken rounded-xl border border-line text-xs">
                 <button
@@ -1153,8 +1396,214 @@ export default function PMDashboard() {
               <div className="w-8 h-8 border-3 border-line border-t-brand rounded-full animate-spin mx-auto mb-3" />
               <p className="text-ink2 text-xs">กำลังรวบรวมประวัติการเข้าตรวจไซต์งานและข้อมูล Defect…</p>
             </div>
+          ) : activeView === "all" ? (
+            /* ────────── มุมมอง 1: รวมทุกใบตรวจ (ITP + Defect รายสัปดาห์) ────────── */
+            filteredAllInspections.length === 0 ? (
+              <div className="py-14 text-center">
+                <div className="w-12 h-12 rounded-full bg-sunken grid place-items-center text-ink3 mx-auto mb-2">
+                  <Search className="w-6 h-6" />
+                </div>
+                <p className="font-bold text-sm text-ink">ไม่พบใบตรวจที่ตรงกับเงื่อนไข</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPm("all");
+                    setPunctFilter("all");
+                    setSearchQuery("");
+                  }}
+                  className="mt-2 text-xs text-brand font-bold underline cursor-pointer"
+                >
+                  ล้างตัวกรองทั้งหมด
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-line/70 mt-2">
+                {filteredAllInspections.map((item) => {
+                  return (
+                    <div
+                      key={`${item.kind}-${item.id}`}
+                      className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:bg-sunken/40 px-2 sm:px-3 rounded-xl transition-colors"
+                    >
+                      {/* ข้อมูลสาขา, ประเภท, PM และพิกัดเช็คอิน */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* ป้ายประเภทใบตรวจ */}
+                          {item.kind === "itp" ? (
+                            <span className="chip bg-sky-500/10 text-sky-700 dark:text-sky-300 font-bold border border-sky-500/20 text-[11px] flex items-center gap-1">
+                              <Layers className="w-3 h-3 text-sky-600" />
+                              <span>โครงสร้าง ITP</span>
+                            </span>
+                          ) : (
+                            <span className="chip bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/20 text-[11px] flex items-center gap-1">
+                              <Wrench className="w-3 h-3 text-amber-600" />
+                              <span>{item.badgeText}</span>
+                            </span>
+                          )}
+
+                          {/* ชื่อสาขา */}
+                          <span className="font-display font-bold text-base text-ink">
+                            {item.storeName}
+                          </span>
+
+                          {/* รหัสสาขา */}
+                          {item.storeCode !== "-" && (
+                            <span className="chip bg-sunken text-ink2 text-[11px] font-mono">
+                              {item.storeCode}
+                            </span>
+                          )}
+
+                          {/* สถานะเช็คอิน GPS */}
+                          {item.verified ? (
+                            <span className="chip bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20 text-[10.5px] font-bold flex items-center gap-1">
+                              <ShieldCheck className="w-3 h-3 text-teal-600" />
+                              <span>✓ GPS หน้างานจริง</span>
+                            </span>
+                          ) : (
+                            <span className="chip bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[10.5px] font-bold flex items-center gap-1">
+                              <XCircle className="w-3 h-3 text-rose-500" />
+                              <span>ยังไม่เช็คอิน GPS</span>
+                            </span>
+                          )}
+
+                          {/* รูป Selfie ยืนยันตัวตน */}
+                          {item.selfiePhoto ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewSelfie(item.selfiePhoto || null)}
+                              className="chip bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-[10.5px] font-bold hover:bg-purple-500/25 transition-colors cursor-pointer flex items-center gap-1"
+                              title="คลิกเพื่อดูรูปถ่าย Selfie คู่หน้างาน"
+                            >
+                              <Camera className="w-3 h-3 text-purple-600" />
+                              <span>ดูรูป Selfie ✓</span>
+                            </button>
+                          ) : (
+                            <span className="chip bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[10.5px] font-bold">
+                              ⚠️ ขาด Selfie
+                            </span>
+                          )}
+
+                          {/* จุดวิกฤต Defect */}
+                          {item.criticalCount && item.criticalCount > 0 ? (
+                            <span className="chip bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 text-[10.5px] font-bold flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3 text-rose-600" />
+                              <span>วิกฤต {item.criticalCount} จุด</span>
+                            </span>
+                          ) : null}
+
+                          {/* หมายเหตุ Remote Video */}
+                          {item.remark && (item.remark.toLowerCase().includes("video") || item.remark.includes("ทางไกล") || item.remark.toLowerCase().includes("remote") || item.remark.includes("วิดีโอ")) ? (
+                            <span className="chip bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10.5px] font-bold">
+                              📹 ตรวจทางไกล (Remote Video)
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {/* แถบย่อย: PM, ผู้รับเหมา, วันที่, พิกัด GPS */}
+                        <div className="flex items-center gap-3 text-xs text-ink2 mt-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5 text-brand" />
+                            <span>PM ผู้ตรวจ: <strong>{item.pmName}</strong></span>
+                          </span>
+
+                          <span className="inline-flex items-center gap-1">
+                            <Building2 className="w-3.5 h-3.5 text-ink3" />
+                            <span>ผู้รับเหมา: {item.contractor}</span>
+                          </span>
+
+                          <span className="inline-flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-ink3" />
+                            <span>วันที่ตรวจ: {item.dateStr || "-"}</span>
+                          </span>
+
+                          {item.checkInTimestamp && (
+                            <span className="inline-flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-ink3" />
+                              <span>เช็คอิน: {fmtTime(item.checkInTimestamp)}</span>
+                            </span>
+                          )}
+
+                          {item.lat && item.lng && (
+                            <span className="inline-flex items-center gap-1 font-mono text-[11px] text-ink3">
+                              <MapPin className="w-3 h-3 text-brand" />
+                              <span>{item.lat.toFixed(4)}, {item.lng.toFixed(4)}{item.accuracy ? ` (±${Math.round(item.accuracy)}m)` : ""}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* ข้อความหมายเหตุเพิ่มเติม */}
+                        {item.remark && (
+                          <div className="mt-2 text-xs bg-amber-500/5 text-ink2 p-2 rounded-lg border border-amber-500/20 flex items-start gap-1.5">
+                            <span className="shrink-0 text-amber-600 dark:text-amber-400 font-bold">
+                              {item.remark.toLowerCase().includes("video") || item.remark.includes("ทางไกล") || item.remark.toLowerCase().includes("remote") || item.remark.includes("วิดีโอ") ? "📹 บันทึก Remote:" : "💬 หมายเหตุ:"}
+                            </span>
+                            <span>{item.remark}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* สถิติการตรวจ & % ความคืบหน้า & ปุ่มเปิดดู */}
+                      <div className="flex items-center gap-4 self-end lg:self-center shrink-0 pt-2 lg:pt-0">
+                        <div className="text-right min-w-[155px]">
+                          {item.kind === "itp" ? (
+                            <>
+                              <div className="flex items-center justify-end gap-2 text-xs font-semibold">
+                                <span className="text-pass">✓ ผ่าน {item.passCount}</span>
+                                {item.failCount > 0 && <span className="text-fail font-bold">✕ ไม่ผ่าน {item.failCount}</span>}
+                              </div>
+                              <div className="flex items-center justify-end gap-1.5 mt-1">
+                                <div className="w-20 bg-line/80 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${item.completionRate === 100 ? "bg-emerald-500" : "bg-brand"}`}
+                                    style={{ width: `${Math.min(100, item.completionRate)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[11px] font-bold text-ink">
+                                  {item.completionRate}%
+                                </span>
+                              </div>
+                              <div className="text-[10.5px] text-ink3 mt-0.5">
+                                บันทึกแล้ว {item.filledCount}/{TOTAL} ข้อ
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-end gap-2 text-xs font-semibold">
+                                <span className="text-brand font-bold">Defect รวม {item.totalDefects || 0} จุด</span>
+                              </div>
+                              <div className="flex items-center justify-end gap-1.5 mt-1">
+                                <div className="w-20 bg-line/80 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${item.completionRate === 100 ? "bg-emerald-500" : "bg-amber-500"}`}
+                                    style={{ width: `${Math.min(100, item.completionRate)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[11px] font-bold text-ink">
+                                  {item.completionRate}% เสร็จ
+                                </span>
+                              </div>
+                              <div className="text-[10.5px] text-ink3 mt-0.5">
+                                <span className="text-amber-600 font-bold">รอแก้ {item.openCount || 0}</span> • <span className="text-emerald-600">แก้แล้ว {item.resolvedCount || 0}</span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => router.push(item.linkUrl)}
+                          className="btn-secondary px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shadow-sm hover:border-brand cursor-pointer"
+                        >
+                          <span>เปิดใบตรวจ</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
           ) : activeView === "sites" ? (
-            /* ────────── มุมมอง 1: ไซต์งานตรวจโครงสร้าง ITP ────────── */
+            /* ────────── มุมมอง 2: ไซต์งานตรวจโครงสร้าง ITP ────────── */
             filteredVisits.length === 0 ? (
               <div className="py-14 text-center">
                 <div className="w-12 h-12 rounded-full bg-sunken grid place-items-center text-ink3 mx-auto mb-2">
