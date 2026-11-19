@@ -44,12 +44,14 @@ export async function listRecords(): Promise<RecordSummary[]> {
 
   if (supabase) {
     try {
+      // 1. ดึง 40 รายการล่าสุดพร้อมผลตรวจ items (คำนวณ pass/fail/filled)
       const { data, error } = await supabase
         .from("inspection_records")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select("id, project, items, check_in, approval_status, saved_at, created_at")
+        .order("created_at", { ascending: false })
+        .limit(40);
 
-      if (!error && Array.isArray(data)) {
+      if (!error && Array.isArray(data) && data.length > 0) {
         const validRows = data.filter((row: any) => row.id && !String(row.id).startsWith("system_"));
         return validRows.map((row: any) => {
           const rec: InspectionRecord = {
@@ -75,6 +77,30 @@ export async function listRecords(): Promise<RecordSummary[]> {
             selfiePhoto: rec.checkIn?.selfiePhoto,
           };
         });
+      }
+
+      // 2. หากรายการมีขนาดใหญ่จนติด timeout ให้ดึงแบบ lightweight (ไม่รวม items) เพื่อให้แสดงผลได้เสมอ
+      const { data: lightData, error: lightError } = await supabase
+        .from("inspection_records")
+        .select("id, project, check_in, approval_status, saved_at, created_at")
+        .order("created_at", { ascending: false })
+        .limit(60);
+
+      if (!lightError && Array.isArray(lightData) && lightData.length > 0) {
+        const validRows = lightData.filter((row: any) => row.id && !String(row.id).startsWith("system_"));
+        return validRows.map((row: any) => ({
+          id: row.id,
+          project: row.project || {},
+          savedAt: row.saved_at || null,
+          pass: 0,
+          fail: 0,
+          filled: 0,
+          approvalStatus: row.approval_status || "รอตรวจ",
+          checkInVerified: Boolean(row.check_in?.verified),
+          checkIn: row.check_in || null,
+          hasSelfie: Boolean(row.check_in?.selfiePhoto),
+          selfiePhoto: row.check_in?.selfiePhoto,
+        }));
       }
     } catch (e) {
       console.warn("Supabase listRecords failed, falling back to local files:", e);
